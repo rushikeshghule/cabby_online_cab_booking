@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+    <!-- Background -->
+    <rect width="32" height="32" rx="6" fill="#0066cc"/>
+    
+    <!-- Car Icon -->
+    <path d="M26 18h-4l-2-6h-8l-2 6H6v-2l2-6c.5-1.5 2-2.5 3.5-2.5h9c1.5 0 3 1 3.5 2.5l2 6v2z" fill="white"/>
+    <circle cx="11" cy="20" r="2" fill="white"/>
+    <circle cx="21" cy="20" r="2" fill="white"/>
+</svg> 

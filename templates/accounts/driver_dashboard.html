@@ -1,0 +1,1578 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Driver Dashboard - Cabby{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Hidden data element to store django context -->
+    <div id="django-data" 
+         data-csrf-token="{{ csrf_token }}"
+         data-is-available="{{ is_available|lower }}"
+         data-has-active-ride="{{ has_active_ride|default:'false'|lower }}">
+    </div>
+    <!-- Driver Profile Header -->
+    <div class="row mb-4">
+        <div class="col-lg-12">
+            <div class="card border-0 bg-gradient-primary text-white shadow-lg" style="background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);">
+                <div class="card-body p-4">
+                    <div class="row align-items-center">
+                        <div class="col-md-2 text-center">
+                            <div class="rounded-circle bg-white d-flex align-items-center justify-content-center mx-auto" style="width: 100px; height: 100px; font-size: 40px; color: #6a11cb;">
+                                {{ user.get_initials }}
+                            </div>
+                        </div>
+                        <div class="col-md-7">
+                            <h2 class="display-6 fw-bold mb-1">Welcome, {{ user.get_full_name|default:user.username }}!</h2>
+                            <p class="lead opacity-75 mb-0">
+                                <i class="fas fa-car me-2"></i>{{ user.driver_profile.vehicle_type }} Driver | 
+                                <i class="fas fa-star text-warning me-1"></i>{{ user.driver_profile.rating|default:"New" }} Rating
+                            </p>
+                        </div>
+                        <div class="col-md-3 text-md-end">
+                            <form action="{% url 'toggle_availability' %}" method="post" class="d-inline">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-lg fw-bold {% if is_available %}btn-light text-primary{% else %}btn-success{% endif %} shadow">
+                                    {% if is_available %}
+                                        <i class="fas fa-toggle-on me-2"></i>You're Online
+                                    {% else %}
+                                        <i class="fas fa-toggle-off me-2"></i>Go Online
+                                    {% endif %}
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Dashboard Content -->
+    <div class="row">
+        <!-- Map and Rides Column -->
+        <div class="col-lg-8">
+            <!-- Map Card -->
+            <div class="card mb-4 shadow-sm border-0 rounded-lg overflow-hidden">
+                <div class="card-body p-0">
+                    <div id="map" class="map-container"></div>
+                    <div id="locationStatus" class="d-none">
+                        <div class="alert alert-warning m-3 d-flex align-items-center">
+                            <i class="fas fa-exclamation-triangle fs-4 me-3"></i>
+                            <div>
+                                <p class="status-message mb-1 fw-bold">Please enable location services to see available rides.</p>
+                                <button type="button" class="btn btn-sm btn-warning" onclick="retryLocation()">
+                                    <i class="fas fa-sync-alt me-1"></i>Retry
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Available Rides -->
+            <div class="card shadow-sm border-0 rounded-lg">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 fw-bold text-primary">
+                        <i class="fas fa-list-alt me-2"></i>Available Rides
+                    </h5>
+                    <div>
+                        <span class="badge bg-primary rounded-pill me-2">
+                            <i class="fas fa-map-marker-alt me-1"></i>
+                            {% if current_latitude and current_longitude %}
+                                Location active
+                            {% else %}
+                                <button id="manualLocationBtn" class="btn btn-sm btn-light text-primary" style="border: none; padding: 0 5px;">
+                                    <i class="fas fa-location-arrow me-1"></i>Set Location
+                                </button>
+                            {% endif %}
+                        </span>
+                        <button id="refreshRidesBtn" class="btn btn-sm btn-outline-primary">
+                            <i class="fas fa-sync-alt me-1"></i>Refresh
+                        </button>
+                    </div>
+                </div>
+                <div class="list-group list-group-flush" id="availableRides">
+                    {% if not is_available %}
+                        <div class="text-center py-5">
+                            <div class="mb-3">
+                                <img src="https://images.unsplash.com/photo-1534216511694-f42ec9144b67?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&h=200&q=80" 
+                                     alt="Offline" class="img-fluid rounded" style="max-height: 150px; object-fit: cover;">
+                            </div>
+                            <h5 class="text-muted mb-3">You're currently offline</h5>
+                            <p class="text-muted mb-0">Go online to start receiving ride requests in your area</p>
+                        </div>
+                    {% elif not current_latitude or not current_longitude %}
+                        <div class="text-center py-5">
+                            <div class="mb-3">
+                                <div class="d-inline-block p-3 bg-warning rounded-circle text-white">
+                                    <i class="fas fa-map-marker-alt fa-3x pulse"></i>
+                                </div>
+                            </div>
+                            <h5 class="text-muted mb-3">Location services required</h5>
+                            <p class="text-muted mb-0">Please enable location services to see available rides near you</p>
+                        </div>
+                    {% elif available_rides %}
+                        {% for ride in available_rides %}
+                            <div class="list-group-item border-0 border-bottom py-3">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="ride-details">
+                                        <div class="mb-2 d-flex align-items-center">
+                                            <div class="route-icon-container me-3">
+                                                <div class="route-line"></div>
+                                                <div class="pickup-dot"></div>
+                                                <div class="dropoff-dot"></div>
+                                            </div>
+                                            <div>
+                                                <h6 class="mb-1 text-truncate" style="max-width: 250px;">
+                                                    {{ ride.pickup_address }}
+                                                </h6>
+                                                <p class="text-muted small mb-0 text-truncate" style="max-width: 250px;">
+                                                    {{ ride.dropoff_address }}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex align-items-center text-muted small">
+                                            <span class="me-3">
+                                                <i class="fas fa-clock me-1"></i>
+                                                {{ ride.created_at|timesince }} ago
+                                            </span>
+                                            <span class="me-3">
+                                                <i class="fas fa-route me-1"></i>
+                                                {{ ride.distance }} km
+                                            </span>
+                                            <span>
+                                                <i class="fas fa-rupee-sign me-1"></i>
+                                                Est. ₹{{ ride.fare|default:'150-200' }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <button class="btn btn-primary accept-ride shadow-sm" data-ride-id="{{ ride.id }}">
+                                            <i class="fas fa-check me-1"></i>Accept
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% else %}
+                        <div class="text-center py-5">
+                            <div class="mb-3">
+                                <img src="https://images.unsplash.com/photo-1508672019048-805c876b67e2?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&h=200&q=80" 
+                                     alt="No rides" class="img-fluid rounded-lg" style="max-height: 150px; object-fit: cover;">
+                            </div>
+                            <h5 class="text-muted mb-3">No rides available right now</h5>
+                            <p class="text-muted mb-3">We'll notify you when new ride requests appear in your area</p>
+                            <div class="spinner-grow text-primary" role="status" style="width: 1rem; height: 1rem;">
+                                <span class="visually-hidden">Searching...</span>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        
+        <!-- Stats Column -->
+        <div class="col-lg-4">
+            <!-- Status Card -->
+            <div class="card mb-4 shadow-sm border-0 rounded-lg">
+                <div class="card-body">
+                    <h5 class="card-title fw-bold text-primary mb-4">
+                        <i class="fas fa-tachometer-alt me-2"></i>Driver Status
+                    </h5>
+                    <div class="status-container bg-light p-3 rounded-lg mb-3">
+                        <div class="d-flex align-items-center mb-3">
+                            <div class="status-badge me-3 {% if is_available %}status-online{% else %}status-offline{% endif %}">
+                                <i class="fas {% if is_available %}fa-signal{% else %}fa-power-off{% endif %}"></i>
+                            </div>
+                            <div>
+                                <h6 class="fw-bold mb-0">{% if is_available %}Available for Rides{% else %}Currently Offline{% endif %}</h6>
+                                <small class="text-muted">
+                                    {% if current_latitude and current_longitude %}
+                                        <i class="fas fa-map-marker-alt me-1 text-success"></i>Location active
+                                    {% else %}
+                                        <i class="fas fa-map-marker-alt me-1 text-danger"></i>Location inactive
+                                    {% endif %}
+                                </small>
+                            </div>
+                        </div>
+                        
+                        <div class="daily-stats">
+                            <div class="d-flex justify-content-between py-2 border-bottom">
+                                <span class="text-muted">Time Online Today</span>
+                                <span class="fw-bold">{{ online_hours|default:"0" }} hrs</span>
+                            </div>
+                            <div class="d-flex justify-content-between py-2 border-bottom">
+                                <span class="text-muted">Completed Rides Today</span>
+                                <span class="fw-bold">{{ today_completed_rides|default:"0" }}</span>
+                            </div>
+                            <div class="d-flex justify-content-between py-2">
+                                <span class="text-muted">Today's Earnings</span>
+                                <span class="fw-bold text-success">₹{{ today_earnings|default:"0" }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Earnings Card -->
+            <div class="card mb-4 shadow-sm border-0 rounded-lg">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h5 class="card-title fw-bold text-primary mb-0">
+                            <i class="fas fa-hand-holding-usd me-2"></i>Earnings
+                        </h5>
+                        <select class="form-select form-select-sm w-auto" id="earningsPeriod">
+                            <option value="week">This Week</option>
+                            <option value="month">This Month</option>
+                            <option value="year">This Year</option>
+                        </select>
+                    </div>
+                    
+                    <div class="total-earnings text-center bg-light p-3 rounded-lg mb-4">
+                        <h6 class="text-muted mb-1">Total Earnings</h6>
+                        <h3 class="text-success mb-0" id="totalEarnings">₹{{ total_earnings|floatformat:2|default:"0.00" }}</h3>
+                    </div>
+                    
+                    <div class="chart-container mb-3">
+                        <canvas id="earningsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Stats Card -->
+            <div class="card shadow-sm border-0 rounded-lg">
+                <div class="card-body">
+                    <h5 class="card-title fw-bold text-primary mb-4">
+                        <i class="fas fa-chart-line me-2"></i>Performance Stats
+                    </h5>
+                    
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="stat-card p-3 bg-light rounded-lg text-center">
+                                <div class="stat-icon bg-primary text-white rounded-circle mb-2">
+                                    <i class="fas fa-star"></i>
+                                </div>
+                                <h6 class="stat-value">{{ request.user.driver_profile.rating|default:"0.0" }}</h6>
+                                <small class="text-muted">Rating</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="stat-card p-3 bg-light rounded-lg text-center">
+                                <div class="stat-icon bg-success text-white rounded-circle mb-2">
+                                    <i class="fas fa-route"></i>
+                                </div>
+                                <h6 class="stat-value">{{ request.user.rides_as_driver.count }}</h6>
+                                <small class="text-muted">Total Rides</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="stat-card p-3 bg-light rounded-lg text-center">
+                                <div class="stat-icon bg-warning text-white rounded-circle mb-2">
+                                    <i class="fas fa-clock"></i>
+                                </div>
+                                <h6 class="stat-value">{{ online_hours|default:"0" }} hrs</h6>
+                                <small class="text-muted">Online Time</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="stat-card p-3 bg-light rounded-lg text-center">
+                                <div class="stat-icon bg-info text-white rounded-circle mb-2">
+                                    <i class="fas fa-percentage"></i>
+                                </div>
+                                <h6 class="stat-value">{{ acceptance_rate|default:"0" }}%</h6>
+                                <small class="text-muted">Acceptance Rate</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mb-3 mt-3">
+        <div class="col">
+            <button class="btn btn-outline-primary" id="setLocationBtn" onclick="useCurrentLocation()">
+                <i class="fas fa-location-arrow"></i> Set My Current Location
+            </button>
+            <button class="btn btn-outline-secondary" id="refreshRidesBtn" onclick="fetchAvailableRides()">
+                <i class="fas fa-sync-alt"></i> Refresh Rides
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<style>
+/* Map Styles */
+.map-container {
+    height: 400px;
+    width: 100%;
+    position: relative;
+    border-radius: 0.5rem;
+    overflow: hidden;
+    z-index: 1;
+}
+
+.driver-marker {
+    background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+    border-radius: 50%;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    box-shadow: 0 0 15px rgba(0,0,0,0.4);
+    border: 3px solid white;
+}
+
+/* Chart Styles */
+.chart-container {
+    height: 200px;
+}
+
+/* Status Styles */
+.status-badge {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.status-online {
+    background: linear-gradient(135deg, #00b09b 0%, #96c93d 100%);
+    color: white;
+}
+
+.status-offline {
+    background: linear-gradient(135deg, #e53935 0%, #e35d5b 100%);
+    color: white;
+}
+
+/* Ride List Styles */
+.route-icon-container {
+    position: relative;
+    height: 40px;
+    width: 20px;
+}
+
+.route-line {
+    position: absolute;
+    left: 9px;
+    top: 5px;
+    bottom: 5px;
+    width: 2px;
+    background-color: #2575fc;
+}
+
+.pickup-dot {
+    position: absolute;
+    top: 0;
+    left: 5px;
+    width: 10px;
+    height: 10px;
+    background-color: #2575fc;
+    border-radius: 50%;
+}
+
+.dropoff-dot {
+    position: absolute;
+    bottom: 0;
+    left: 5px;
+    width: 10px;
+    height: 10px;
+    background-color: #6a11cb;
+    border-radius: 50%;
+}
+
+/* Stat Card Styles */
+.stat-icon {
+    width: 50px;
+    height: 50px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    margin: 0 auto;
+}
+
+.stat-value {
+    font-size: 1.75rem;
+    font-weight: bold;
+    margin-bottom: 0.25rem;
+}
+
+/* Pulse Animation */
+.pulse {
+    animation: pulse-animation 2s infinite;
+}
+
+@keyframes pulse-animation {
+    0% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7);
+    }
+    
+    70% {
+        transform: scale(1);
+        box-shadow: 0 0 0 10px rgba(255, 193, 7, 0);
+    }
+    
+    100% {
+        transform: scale(0.95);
+        box-shadow: 0 0 0 0 rgba(255, 193, 7, 0);
+    }
+}
+
+.accept-ride {
+    transition: all 0.3s ease;
+}
+
+.accept-ride:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<!-- jQuery (if needed) -->
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<!-- Leaflet -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- Store Django context in a JSON template to avoid JavaScript linting issues -->
+<script type="text/template" id="cabby-driver-context">
+{
+    "user": {
+        "id": {{ request.user.id }},
+        "type": "driver"
+    },
+    "config": {
+        "pollingIntervals": {
+            "locationUpdate": 15000,
+            "availableRides": 10000,
+            "notifications": 10000
+        },
+        "webSocket": {
+            "enabled": {{ USE_WEBSOCKETS|lower }},
+            "port": {{ WEBSOCKET_PORT|default:"8001" }}
+        }
+    }
+}
+</script>
+
+<!-- Main JavaScript logic -->
+<script>
+// Define global variables
+let map, driverMarker;
+let currentLat = null;
+let currentLng = null;
+let chatSocket = null;
+let notificationSocket = null;
+let statusPollingInterval = null;
+let myChart = null;
+let driverIcon = null;
+let previousRideIds = []; // Add this to track previous ride IDs for sound notification
+
+// Initialize CABBY_CONFIG object with URLs and settings
+const CABBY_CONFIG = {
+    urls: {
+        locationUpdate: "{% url 'update_location' %}",
+        availableRides: "{% url 'available_rides' %}",
+        acceptRideBase: "{% url 'accept_ride_ajax' 0 %}",
+        driverEarnings: "{% url 'driver_earnings' %}",
+        toggleAvailability: '/accounts/toggle-availability/',
+        notifications: '/api/notifications/'
+    },
+    pollingIntervals: {
+        locationUpdate: 15000, // 15 seconds
+        availableRides: 10000, // 10 seconds
+        notifications: 10000,   // 10 seconds,
+    },
+    webSocket: {
+        enabled: false, // Default value, will be overridden below
+        port: 8001,     // Default value, will be overridden below
+        retryInterval: 10000, // 10 seconds
+        heartbeatInterval: 30000 // 30 seconds
+    }
+};
+
+// Load configuration from Django template
+try {
+    const contextJson = document.getElementById('cabby-driver-context').textContent;
+    const contextData = JSON.parse(contextJson);
+    
+    // Override WebSocket settings from Django
+    if (contextData.config && contextData.config.webSocket) {
+        CABBY_CONFIG.webSocket.enabled = contextData.config.webSocket.enabled;
+        CABBY_CONFIG.webSocket.port = contextData.config.webSocket.port;
+    }
+    
+    console.log("Configuration loaded from Django template:", CABBY_CONFIG);
+} catch (error) {
+    console.error("Failed to load configuration from Django template:", error);
+}
+
+// Initialize event handlers after DOM is fully loaded
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize notification system with polling (not WebSockets)
+    setupStatusPolling();
+    
+    // Initialize map and location tracking
+    initializeMap();
+    
+    // Initialize earnings chart
+    loadEarningsData();
+    
+    // Setup available rides checking
+    checkAvailableRides();
+    
+    // Setup availability toggle button
+    setupAvailabilityToggle();
+    
+    // Set up manual location button
+    setupManualLocationButton();
+    
+    // Set up accept ride button handlers using event delegation
+    setupAcceptRideHandlers();
+    
+    // Always try to fetch available rides regardless of location status
+    // This ensures rides are displayed even without perfect location data
+    if (getDjangoData().getAttribute('data-is-available') === 'true') {
+        fetchAvailableRides();
+    }
+
+    // Disable chat WebSocket initialization
+    // We'll use polling for real-time updates
+    console.log("WebSockets disabled in configuration - using polling instead");
+});
+
+// Initialize map
+function initializeMap() {
+    console.log("Initializing map...");
+    
+    // Create custom driver icon
+    driverIcon = L.divIcon({
+        className: 'driver-marker',
+        html: '<i class="fas fa-car-side text-white"></i>',
+        iconSize: [40, 40],
+        iconAnchor: [20, 20]
+    });
+    
+    // Make sure the map container exists
+    const mapContainer = document.getElementById('map');
+    if (!mapContainer) {
+        console.error("Map container not found!");
+        return;
+    }
+    
+    // Check if map is already initialized
+    if (map) {
+        console.log("Map already initialized, destroying previous instance");
+        map.remove();
+    }
+    
+    // Create map with a fallback center (New Delhi)
+    try {
+        map = L.map('map', {
+            zoomControl: true,
+            attributionControl: true
+        }).setView([28.6139, 77.2090], 12);
+        
+        // Add tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 19
+        }).addTo(map);
+        
+        console.log("Map initialized successfully");
+        
+        // Force a resize event to ensure the map renders properly
+        setTimeout(function() {
+            window.dispatchEvent(new Event('resize'));
+            if (map) map.invalidateSize();
+            console.log("Map size refreshed");
+        }, 500);
+        
+        // Attempt to get current location using browser geolocation
+        if (typeof useCurrentLocation === 'function') {
+            // Call our improved location detection function
+            useCurrentLocation();
+        } else {
+            // Legacy method
+            getCurrentLocation();
+        }
+        
+        // Start location tracking for real-time updates
+        startLocationTracking();
+    } catch (e) {
+        console.error("Error initializing map:", e);
+    }
+}
+
+// Start periodic location tracking
+function startLocationTracking() {
+    // Update location every 15 seconds using our improved location detection
+    setInterval(function() {
+        // Only update if the driver is available
+        if (getDjangoData().getAttribute('data-is-available') === 'true') {
+            // Use our improved location function if available
+            if (typeof useCurrentLocation === 'function') {
+                // Use a silent version that doesn't show UI feedback
+                updateDriverLocation(currentLat, currentLng, function() {
+                    console.log('Location automatically updated');
+                    // Periodically fetch available rides
+                    fetchAvailableRides();
+                });
+            } else {
+                // Legacy fallback
+                getCurrentLocation();
+            }
+        }
+    }, CABBY_CONFIG.pollingIntervals.locationUpdate);
+}
+
+// Get current location
+function getCurrentLocation() {
+    if (!navigator.geolocation) {
+        showLocationError("Geolocation is not supported by your browser");
+        return;
+    }
+    
+    // Show attempting to get location status
+    const locationStatus = document.getElementById('locationStatus');
+    if (locationStatus) {
+        locationStatus.classList.remove('d-none');
+        const statusMessage = locationStatus.querySelector('.status-message');
+        if (statusMessage) {
+            statusMessage.textContent = 'Attempting to get your location...';
+        }
+    }
+    
+    navigator.geolocation.getCurrentPosition(
+        position => {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            
+            // Store current location in global variables
+            currentLat = lat;
+            currentLng = lng;
+            
+            // Create or update marker
+            if (driverMarker) {
+                driverMarker.setLatLng([lat, lng]);
+            } else {
+                createDriverMarker(lat, lng);
+            }
+            
+            // Center map on driver
+            map.setView([lat, lng], 13);
+            
+            // Hide location error message if shown
+            if (locationStatus) {
+                locationStatus.classList.add('d-none');
+            }
+            
+            // Update server with new location
+            updateDriverLocation(lat, lng, () => {
+                console.log('Location updated on server');
+                // Fetch available rides after location update
+                fetchAvailableRides();
+            });
+        },
+        error => {
+            console.error("Geolocation error:", error);
+            showLocationError(getLocationErrorMessage(error));
+            
+            // Still try to fetch available rides even with location error
+            if (getDjangoData().getAttribute('data-is-available') === 'true') {
+                fetchAvailableRides();
+            }
+        },
+        {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+        }
+    );
+}
+
+// Update location on server
+function updateLocation(lat, lng) {
+    console.log("Sending location update to server:", lat, lng);
+    fetch(CABBY_CONFIG.urls.locationUpdate, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getDjangoData().getAttribute('data-csrf-token')
+        },
+        body: JSON.stringify({
+            latitude: lat,
+            longitude: lng
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log("Location update response:", data);
+        if (data.success) {
+            // Location updated successfully, fetch available rides
+            if (getDjangoData().getAttribute('data-is-available') === 'true') {
+                fetchAvailableRides();
+            }
+        } else {
+            console.error("Failed to update location:", data.error);
+        }
+    })
+    .catch(error => {
+        console.error("Error updating location:", error);
+    });
+}
+
+// Update driver location on server and execute callback on success
+function updateDriverLocation(lat, lng, callback) {
+    if (!lat || !lng) {
+        console.error("Invalid location coordinates:", lat, lng);
+        return;
+    }
+    
+    console.log("Updating driver location:", lat, lng);
+    
+    fetch(CABBY_CONFIG.urls.locationUpdate, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getDjangoData().getAttribute('data-csrf-token')
+        },
+        body: JSON.stringify({
+            latitude: lat,
+            longitude: lng
+        })
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log("Location update response:", data);
+        if (data.success) {
+            // Location updated successfully
+            // Update global state
+            currentLat = lat;
+            currentLng = lng;
+            
+            // Execute callback if provided
+            if (typeof callback === 'function') {
+                callback();
+            }
+        } else {
+            console.error("Failed to update location:", data.error || "Unknown error");
+            showToast('error', 'Failed to update your location', 'Location Error');
+        }
+    })
+    .catch(error => {
+        console.error("Error updating location:", error);
+        showToast('error', 'Network error while updating location', 'Location Error');
+    });
+}
+
+// Show location error
+function showLocationError(message) {
+    const statusDiv = document.getElementById('locationStatus');
+    statusDiv.querySelector('.status-message').textContent = message;
+    statusDiv.classList.remove('d-none');
+}
+
+// Get location error message
+function getLocationErrorMessage(error) {
+    switch(error.code) {
+        case error.PERMISSION_DENIED:
+            return "Please enable location access to use the driver dashboard";
+        case error.POSITION_UNAVAILABLE:
+            return "Location information is unavailable";
+        case error.TIMEOUT:
+            return "Location request timed out";
+        default:
+            return "An unknown error occurred while getting location";
+    }
+}
+
+// Set up availability toggle
+function setupAvailabilityToggle() {
+    const availabilityToggle = document.getElementById('availabilityToggle');
+    
+    if (availabilityToggle) {
+        availabilityToggle.checked = getDjangoData().getAttribute('data-is-available') === 'true';
+        
+        availabilityToggle.addEventListener('change', function() {
+            const isAvailable = this.checked;
+            
+            // Send request to update availability
+            fetch('/toggle-availability/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getDjangoData().getAttribute('data-csrf-token')
+                },
+                body: JSON.stringify({
+                    is_available: isAvailable
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    // Update UI
+                    const statusText = document.getElementById('availabilityStatusText');
+                    if (statusText) {
+                        statusText.textContent = isAvailable ? 'Online' : 'Offline';
+                        statusText.className = isAvailable ? 'text-success' : 'text-secondary';
+                    }
+                    
+                    // Refresh available rides
+                    if (isAvailable) {
+                        fetchAvailableRides();
+                    }
+                }
+            });
+        });
+    }
+}
+
+// Check for available rides
+function checkAvailableRides() {
+    if (getDjangoData().getAttribute('data-is-available') === 'true' && !getDjangoData().getAttribute('data-has-active-ride')) {
+        fetchAvailableRides();
+        
+        // Refresh available rides every 10 seconds
+        setInterval(fetchAvailableRides, CABBY_CONFIG.pollingIntervals.availableRides);
+    }
+}
+
+// Fetch available rides
+function fetchAvailableRides() {
+    console.log("Fetching available rides...");
+    
+    // Ensure we have the absolute URL path to available_rides
+    let availableRidesUrl = CABBY_CONFIG.urls.availableRides;
+    
+    // Check if the URL is relative and convert to absolute if needed
+    if (availableRidesUrl && !availableRidesUrl.startsWith('http') && !availableRidesUrl.startsWith('/')) {
+        availableRidesUrl = '/' + availableRidesUrl;
+    }
+    
+    console.log("Using URL:", availableRidesUrl);
+    
+    fetch(availableRidesUrl)
+        .then(response => response.json())
+        .then(data => {
+            console.log("Available rides response:", data);
+            
+            const ridesList = document.getElementById('availableRides');
+            if (!ridesList) {
+                console.error("Available rides list element not found");
+                return;
+            }
+            
+            // Check for new rides by comparing with previous state
+            const currentRideIds = data.rides.map(ride => ride.id);
+            const newRides = data.rides.filter(ride => !previousRideIds.includes(ride.id));
+            
+            // Play notification sound if there are new rides
+            if (newRides.length > 0) {
+                console.log(`Found ${newRides.length} new rides!`);
+                playNotificationSound();
+                
+                // If there are new rides, show a toast notification
+                if (newRides.length === 1) {
+                    showToast('success', 'New ride request in your area!', 'New Ride');
+                } else {
+                    showToast('success', `${newRides.length} new ride requests in your area!`, 'New Rides');
+                }
+            }
+            
+            // Update previous ride IDs for next comparison
+            previousRideIds = currentRideIds;
+            
+            // Clear the list
+            ridesList.innerHTML = '';
+            
+            if (data.rides && data.rides.length > 0) {
+                // Create rides list
+                data.rides.forEach(ride => {
+                    const rideItem = document.createElement('div');
+                    rideItem.className = 'list-group-item border-0 border-bottom py-3';
+                    rideItem.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="ride-details">
+                                <div class="mb-2 d-flex align-items-center">
+                                    <div class="route-icon-container me-3">
+                                        <div class="route-line"></div>
+                                        <div class="pickup-dot"></div>
+                                        <div class="dropoff-dot"></div>
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-1 text-truncate" style="max-width: 250px;">
+                                            ${ride.pickup_address}
+                                        </h6>
+                                        <p class="text-muted small mb-0 text-truncate" style="max-width: 250px;">
+                                            ${ride.dropoff_address}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div class="d-flex align-items-center text-muted small">
+                                    <span class="me-3">
+                                        <i class="fas fa-clock me-1"></i>
+                                        ${ride.created_at ? timeAgo(new Date(ride.created_at)) : 'Just now'}
+                                    </span>
+                                    <span class="me-3">
+                                        <i class="fas fa-route me-1"></i>
+                                        ${ride.distance} km
+                                    </span>
+                                    <span>
+                                        <i class="fas fa-rupee-sign me-1"></i>
+                                        Est. ₹${ride.fare || '150-200'}
+                                    </span>
+                                </div>
+                            </div>
+                            <div>
+                                <button class="btn btn-primary accept-ride shadow-sm" data-ride-id="${ride.id}">
+                                    <i class="fas fa-check me-1"></i>Accept
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                    
+                    ridesList.appendChild(rideItem);
+                });
+            } else {
+                // Show no rides message (only if the driver is online)
+                if (getDjangoData().getAttribute('data-is-available') === 'true') {
+                    ridesList.innerHTML = `
+                        <div class="text-center py-5">
+                            <div class="mb-3">
+                                <img src="https://images.unsplash.com/photo-1508672019048-805c876b67e2?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&h=200&q=80" 
+                                     alt="No rides" class="img-fluid rounded-lg" style="max-height: 150px; object-fit: cover;">
+                            </div>
+                            <h5 class="text-muted mb-3">No rides available right now</h5>
+                            <p class="text-muted mb-3">We'll notify you when new ride requests appear in your area</p>
+                            <div class="spinner-grow text-primary" role="status" style="width: 1rem; height: 1rem;">
+                                <span class="visually-hidden">Searching...</span>
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        })
+        .catch(error => {
+            console.error("Error fetching available rides:", error);
+        });
+}
+
+// Format time ago function
+function timeAgo(date) {
+    const seconds = Math.floor((new Date() - date) / 1000);
+    
+    let interval = seconds / 31536000;
+    if (interval > 1) return Math.floor(interval) + " years ago";
+    
+    interval = seconds / 2592000;
+    if (interval > 1) return Math.floor(interval) + " months ago";
+    
+    interval = seconds / 86400;
+    if (interval > 1) return Math.floor(interval) + " days ago";
+    
+    interval = seconds / 3600;
+    if (interval > 1) return Math.floor(interval) + " hours ago";
+    
+    interval = seconds / 60;
+    if (interval > 1) return Math.floor(interval) + " minutes ago";
+    
+    if (seconds < 10) return "Just now";
+    
+    return Math.floor(seconds) + " seconds ago";
+}
+
+// Play notification sound for new rides
+function playNotificationSound() {
+    try {
+        // Create audio element with different notification sound
+        const audio = new Audio('/static/sounds/mixkit-positive-notification-951.wav');
+        if (!audio) {
+            console.error("Could not create audio element");
+            return;
+        }
+        
+        // Set volume (0.0 to 1.0)
+        audio.volume = 0.7;
+        
+        // Play the sound
+        audio.play()
+            .then(() => console.log("Notification sound played successfully"))
+            .catch(error => {
+                console.error("Error playing notification sound:", error);
+                // Try alternative approach if the first one fails
+                const alternativeAudio = new Audio('https://cdn.pixabay.com/download/audio/2022/03/15/audio_88d598b0fe.mp3?filename=notification-sound-7062.mp3');
+                alternativeAudio.volume = 0.5;
+                alternativeAudio.play().catch(e => console.log('Alternative audio play failed:', e));
+            });
+    } catch (e) {
+        console.error("Audio playback not supported:", e);
+    }
+}
+
+// Handle accept ride button click
+function acceptRide(rideId, button) {
+    button.disabled = true;
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Accepting...';
+    
+    // Fix the URL format to correctly replace the ride ID
+    let acceptUrl = CABBY_CONFIG.urls.acceptRideBase.replace('0', rideId);
+    console.log("Accepting ride with URL:", acceptUrl);
+    
+    fetch(acceptUrl, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': getDjangoData().getAttribute('data-csrf-token')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showToast('success', 'Ride accepted successfully!', 'Success');
+            window.location.href = data.redirect_url;
+        } else {
+            showToast('error', data.error || 'Failed to accept ride', 'Error');
+            button.disabled = false;
+            button.innerHTML = '<i class="fas fa-check me-1"></i>Accept';
+        }
+    })
+    .catch(error => {
+        console.error('Error accepting ride:', error);
+        showToast('error', 'An error occurred while accepting the ride', 'Error');
+        button.disabled = false;
+        button.innerHTML = '<i class="fas fa-check me-1"></i>Accept';
+    });
+}
+
+// Handle event delegation for accept ride buttons
+function setupAcceptRideHandlers() {
+    // Use event delegation for all accept ride buttons (both static and dynamic)
+    document.addEventListener('click', function(event) {
+        // Check if the clicked element is an accept ride button or its child
+        const button = event.target.closest('.accept-ride');
+        if (button) {
+            const rideId = button.getAttribute('data-ride-id');
+            acceptRide(rideId, button);
+        }
+    });
+}
+
+// Load earnings data
+function loadEarningsData() {
+    const period = document.getElementById('earningsPeriod').value || 'week';
+    
+    fetch(`${CABBY_CONFIG.urls.driverEarnings}?period=${period}`)
+        .then(response => response.json())
+        .then(data => {
+            const formattedLabels = data.earnings_data.map(item => {
+                const date = new Date(item.date);
+                return date.toLocaleDateString('en-IN', {day: 'numeric', month: 'short'});
+            });
+            
+            const chartData = {
+                labels: formattedLabels,
+                values: data.earnings_data.map(item => parseFloat(item.amount))
+            };
+            
+            // Initialize chart if the element exists
+            const chartCanvas = document.getElementById('earningsChart');
+            if (chartCanvas) {
+                initEarningsChart(chartData);
+            }
+            
+            // Safely update summary statistics
+            updateElement('totalEarnings', '₹' + parseFloat(data.total_earnings).toFixed(2));
+            updateElement('totalRides', data.total_rides);
+            updateElement('averageRating', parseFloat(data.average_rating).toFixed(1));
+        })
+        .catch(error => {
+            console.error('Error loading earnings data:', error);
+        });
+}
+
+// Helper function to safely update element text content
+function updateElement(id, value) {
+    const element = document.getElementById(id);
+    if (element) {
+        element.textContent = value;
+    }
+}
+
+// Handle earnings period change
+document.getElementById('earningsPeriod').addEventListener('change', loadEarningsData);
+
+// Initialize earnings chart
+function initEarningsChart(data) {
+    const ctx = document.getElementById('earningsChart').getContext('2d');
+    
+    // Check if chart already exists and destroy it properly
+    if (window.earningsChart instanceof Chart) {
+        window.earningsChart.destroy();
+    }
+    
+    // Create new chart
+    window.earningsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: data.labels,
+            datasets: [{
+                label: 'Earnings (₹)',
+                data: data.values,
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 2,
+                tension: 0.3,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return '₹' + value;
+                        }
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return '₹' + context.raw;
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Retry location
+function retryLocation() {
+    getCurrentLocation();
+}
+
+// Handle manual location setting
+function setupManualLocationButton() {
+    // NOTE: This function is now deprecated and kept for backward compatibility
+    // Our new useCurrentLocation function provides a better solution
+    
+    const manualLocationBtn = document.getElementById('manualLocationBtn');
+    if (manualLocationBtn) {
+        manualLocationBtn.addEventListener('click', function() {
+            // Use our new location detection function instead
+            useCurrentLocation();
+        });
+    }
+    
+    // Setup refresh button for rides
+    const refreshRidesBtn = document.getElementById('refreshRidesBtn');
+    if (refreshRidesBtn) {
+        refreshRidesBtn.addEventListener('click', function() {
+            fetchAvailableRides();
+            showToast("info", "Refreshing available rides...", "Checking for rides");
+        });
+    }
+}
+
+// Show toast notification
+function showToast(message, type = "info") {
+    // Create toast container if it doesn't exist
+    let toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toast-container';
+        toastContainer.className = 'position-fixed bottom-0 end-0 p-3';
+        toastContainer.style.zIndex = "1050";
+        document.body.appendChild(toastContainer);
+    }
+    
+    // Create toast element
+    const toastId = 'toast-' + Date.now();
+    const toast = document.createElement('div');
+    toast.id = toastId;
+    toast.className = `toast align-items-center text-white bg-${type} border-0`;
+    toast.setAttribute('role', 'alert');
+    toast.setAttribute('aria-live', 'assertive');
+    toast.setAttribute('aria-atomic', 'true');
+    
+    // Toast content
+    toast.innerHTML = `
+        <div class="d-flex">
+            <div class="toast-body">
+                ${message}
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+    `;
+    
+    // Add to container
+    toastContainer.appendChild(toast);
+    
+    // Initialize and show toast
+    const bsToast = new bootstrap.Toast(toast, {delay: 3000});
+    bsToast.show();
+    
+    // Remove after hiding
+    toast.addEventListener('hidden.bs.toast', function() {
+        toast.remove();
+    });
+}
+
+// Get Django data from hidden element
+function getDjangoData() {
+    const djangoDataElement = document.getElementById('django-data');
+    if (!djangoDataElement) {
+        console.error('Django data element not found');
+        return {
+            csrfToken: '',
+            isAvailable: false,
+            hasActiveRide: false,
+            getAttribute: function(name) {
+                if (name === 'data-csrf-token') return '';
+                if (name === 'data-is-available') return 'false';
+                if (name === 'data-has-active-ride') return 'false';
+                return '';
+            }
+        };
+    }
+    
+    return djangoDataElement;
+}
+
+function useCurrentLocation() {
+    if (navigator.geolocation) {
+        const locationBtn = document.getElementById('setLocationBtn');
+        const originalContent = locationBtn.innerHTML;
+        locationBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Getting location...';
+        locationBtn.disabled = true;
+        
+        showToast('info', 'Fetching your current location...', 'Please wait');
+
+        navigator.geolocation.getCurrentPosition(
+            function(position) {
+                // Success handler
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                
+                // Update global variables
+                currentLat = lat;
+                currentLng = lng;
+                
+                // Get address for the location
+                fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        const address = data.display_name;
+                        
+                        updateDriverLocation(lat, lng, function() {
+                            // Update map view
+                            if (driverMarker) {
+                                driverMarker.setLatLng([lat, lng]);
+                            } else {
+                                createDriverMarker(lat, lng);
+                            }
+                            map.setView([lat, lng], 13);
+                            
+                            // Show success message
+                            showToast('success', 'Location updated: ' + address, 'Location Set');
+                            
+                            // Fetch available rides for the new location
+                            fetchAvailableRides();
+                        });
+                        
+                        // Reset button
+                        locationBtn.innerHTML = originalContent;
+                        locationBtn.disabled = false;
+                    })
+                    .catch(error => {
+                        console.error('Error getting address:', error);
+                        
+                        // Still update location even if address lookup fails
+                        updateDriverLocation(lat, lng, function() {
+                            if (driverMarker) {
+                                driverMarker.setLatLng([lat, lng]);
+                            } else {
+                                createDriverMarker(lat, lng);
+                            }
+                            map.setView([lat, lng], 13);
+                            
+                            showToast('success', 'Location updated successfully', 'Location Set');
+                            fetchAvailableRides();
+                        });
+                        
+                        locationBtn.innerHTML = originalContent;
+                        locationBtn.disabled = false;
+                    });
+            },
+            function(error) {
+                // Error handler
+                console.error('Error getting location:', error);
+                locationBtn.innerHTML = originalContent;
+                locationBtn.disabled = false;
+                
+                let errorMessage = 'Unable to get your location';
+                switch(error.code) {
+                    case error.PERMISSION_DENIED:
+                        errorMessage = 'You denied permission to access your location';
+                        break;
+                    case error.POSITION_UNAVAILABLE:
+                        errorMessage = 'Location information is unavailable';
+                        break;
+                    case error.TIMEOUT:
+                        errorMessage = 'Request to get your location timed out';
+                        break;
+                    case error.UNKNOWN_ERROR:
+                        errorMessage = 'An unknown error occurred while getting your location';
+                        break;
+                }
+                
+                showToast('error', errorMessage, 'Location Error');
+                
+                // Use default location as fallback
+                setDefaultLocation();
+            },
+            { 
+                enableHighAccuracy: true, 
+                timeout: 10000, 
+                maximumAge: 0 
+            }
+        );
+    } else {
+        // Browser doesn't support geolocation
+        showToast('error', 'Your browser does not support geolocation', 'Error');
+        setDefaultLocation();
+    }
+}
+
+function setDefaultLocation() {
+    // Fallback to New Delhi coordinates
+    const lat = 28.6139;
+    const lng = 77.2090;
+    
+    currentLat = lat;
+    currentLng = lng;
+    
+    showToast('warning', 'Using default location (New Delhi)', 'Default Location');
+    
+    updateDriverLocation(lat, lng, function() {
+        if (driverMarker) {
+            driverMarker.setLatLng([lat, lng]);
+        } else {
+            createDriverMarker(lat, lng);
+        }
+        map.setView([lat, lng], 13);
+        fetchAvailableRides();
+    });
+}
+
+function createDriverMarker(lat, lng) {
+    if (!map) {
+        console.error("Map not initialized yet");
+        return;
+    }
+    
+    if (driverMarker) {
+        driverMarker.remove();
+    }
+    
+    driverMarker = L.marker([lat, lng], {
+        icon: driverIcon
+    }).addTo(map);
+    
+    driverMarker.bindPopup("You are here").openPopup();
+    
+    return driverMarker;
+}
+
+// Setup status polling as a fallback when WebSockets aren't available
+function setupStatusPolling() {
+    console.log('Setting up polling for notifications and ride status updates');
+    
+    // Clear any existing polling
+    if (statusPollingInterval) {
+        clearInterval(statusPollingInterval);
+    }
+    
+    // Set up poll for ride status and available rides
+    statusPollingInterval = setInterval(function() {
+        // Only poll if driver is available
+        if (getDjangoData().getAttribute('data-is-available') === 'true') {
+            console.log('Polling for available rides and status updates');
+            fetchAvailableRides();
+            pollForNotifications();
+        }
+    }, CABBY_CONFIG.pollingIntervals.availableRides);
+    
+    console.log('Status polling initialized');
+    
+    // Start initial poll
+    if (getDjangoData().getAttribute('data-is-available') === 'true') {
+        fetchAvailableRides();
+        pollForNotifications();
+    }
+}
+
+// Function that used to setup WebSockets - now just logs info and uses polling
+function setupNotificationSocket() {
+    if (!CABBY_CONFIG.webSocket.enabled) {
+        console.log("WebSockets disabled in configuration - using polling for notifications instead");
+        return;
+    }
+    
+    // This function is kept for compatibility but doesn't actually connect to WebSockets
+    // The actual implementation is in setupStatusPolling now
+}
+
+// Function to handle chat socket initialization (kept for compatibility but disabled)
+function setupChatSocket(rideId) {
+    if (!CABBY_CONFIG.webSocket.enabled) {
+        console.log("WebSockets disabled in configuration - chat functionality will use polling instead");
+        return null;
+    }
+    
+    console.log("WebSocket chat functionality is disabled");
+    return null;
+}
+
+// Fallback: Poll for notifications when WebSockets aren't working
+let lastNotificationCheckTime = new Date().toISOString();
+
+function pollForNotifications() {
+    fetch('/api/notifications/?since=' + encodeURIComponent(lastNotificationCheckTime))
+        .then(response => response.json())
+        .then(data => {
+            if (data.notifications && data.notifications.length > 0) {
+                data.notifications.forEach(handleNewNotification);
+            }
+            
+            // Check for ride status updates
+            if (data.ride_updates && data.ride_updates.length > 0) {
+                const activeRide = data.ride_updates.find(ride => ride.is_active);
+                if (activeRide) {
+                    handleRideStatusUpdate({
+                        ride_id: activeRide.id,
+                        status: activeRide.status,
+                        message: activeRide.status_message,
+                        redirect_url: activeRide.detail_url
+                    });
+                }
+            }
+            
+            // Update last check time
+            lastNotificationCheckTime = new Date().toISOString();
+        })
+        .catch(error => {
+            console.error('Error polling for notifications:', error);
+        });
+}
+
+function handleNewNotification(notification) {
+    // Update notification count in the navbar
+    const countBadge = document.getElementById('notification-count');
+    if (countBadge) {
+        let count = parseInt(countBadge.textContent || '0');
+        countBadge.textContent = count + 1;
+        countBadge.classList.remove('d-none');
+    }
+    
+    // Show notification toast
+    showNotificationToast(notification.title, notification.message, notification.action_url);
+}
+
+function handleRideStatusUpdate(data) {
+    // Show notification toast
+    showNotificationToast('Ride Update', data.message, data.redirect_url);
+    
+    // Refresh the page if we have an active ride that got updated
+    const djangoData = getDjangoData();
+    const hasActiveRide = djangoData.getAttribute('data-has-active-ride') === 'true';
+    
+    if (hasActiveRide && data.ride_id) {
+        // Reload the page to show updated ride status
+        window.location.reload();
+    }
+}
+
+function showNotificationToast(title, message, actionUrl) {
+    // Create toast container if it doesn't exist
+    let toastContainer = document.querySelector('.toast-container');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.className = 'toast-container position-fixed top-0 end-0 p-3';
+        document.body.appendChild(toastContainer);
+    }
+    
+    // Create a unique ID for this toast
+    const toastId = 'toast-' + Date.now();
+    
+    // Create toast HTML
+    const toastHtml = `
+        <div id="${toastId}" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header bg-primary text-white">
+                <strong class="me-auto">${title}</strong>
+                <small>Just now</small>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body">
+                ${message}
+                ${actionUrl ? `<div class="mt-2 pt-2 border-top">
+                    <a href="${actionUrl}" class="btn btn-primary btn-sm">View Details</a>
+                </div>` : ''}
+            </div>
+        </div>
+    `;
+    
+    // Add the toast to the container
+    toastContainer.insertAdjacentHTML('beforeend', toastHtml);
+    
+    // Initialize and show the toast
+    const toastElement = document.getElementById(toastId);
+    const toast = new bootstrap.Toast(toastElement, {delay: 5000});
+    toast.show();
+    
+    // Play notification sound
+    playNotificationSound();
+    
+    // Auto-remove toast from DOM after it's hidden
+    toastElement.addEventListener('hidden.bs.toast', function() {
+        toastElement.remove();
+    });
+}
+
+// Play a notification sound
+function playNotificationSound() {
+    try {
+        const audio = new Audio('/static/sounds/mixkit-positive-notification-951.wav');
+        audio.volume = 0.5;
+        audio.play().catch(e => console.log('Audio play failed:', e));
+    } catch (e) {
+        console.log('Audio not supported');
+    }
+}
+</script>
+{% endblock %}

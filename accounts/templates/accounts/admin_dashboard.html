@@ -1,0 +1,309 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+    .stats-card {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    .stats-value {
+        font-size: 24px;
+        font-weight: bold;
+        margin: 10px 0;
+    }
+    .growth-indicator {
+        font-size: 14px;
+        padding: 4px 8px;
+        border-radius: 4px;
+    }
+    .growth-positive {
+        background: #e6f4ea;
+        color: #137333;
+    }
+    .growth-negative {
+        background: #fce8e6;
+        color: #c5221f;
+    }
+    #map {
+        height: 400px;
+        border-radius: 8px;
+    }
+    .table-container {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    .chart-container {
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+        height: 400px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <h1 class="mb-4">Admin Dashboard</h1>
+
+    <!-- Quick Stats Section -->
+    <div class="row">
+        <div class="col-md-3">
+            <div class="stats-card">
+                <h5>Total Users</h5>
+                <div class="stats-value">{{ total_users }}</div>
+                <small class="text-muted">{{ rider_count }} Riders, {{ driver_count }} Drivers</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card">
+                <h5>Active Rides</h5>
+                <div class="stats-value">{{ active_rides_count }}</div>
+                <small class="text-muted">{{ completed_rides_today }} completed today</small>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card">
+                <h5>Today's Revenue</h5>
+                <div class="stats-value">₹{{ today_revenue|floatformat:2 }}</div>
+                <span class="growth-indicator {% if revenue_growth >= 0 %}growth-positive{% else %}growth-negative{% endif %}">
+                    {{ revenue_growth|floatformat:1 }}% vs yesterday
+                </span>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="stats-card">
+                <h5>Pending Driver Approvals</h5>
+                <div class="stats-value">{{ pending_approvals_count }}</div>
+                <small class="text-muted">Click below to review</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Revenue Chart -->
+    <div class="row mt-4">
+        <div class="col-md-8">
+            <div class="chart-container">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">Revenue Trends</h5>
+                    <div class="btn-group">
+                        <button class="btn btn-outline-primary btn-sm period-selector" data-period="week">Week</button>
+                        <button class="btn btn-outline-primary btn-sm period-selector" data-period="month">Month</button>
+                        <button class="btn btn-outline-primary btn-sm period-selector" data-period="year">Year</button>
+                    </div>
+                </div>
+                <canvas id="revenueChart"></canvas>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <!-- Active Rides Table -->
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="table-container">
+                <h5>Active Rides</h5>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Ride ID</th>
+                                <th>Rider</th>
+                                <th>Driver</th>
+                                <th>From</th>
+                                <th>To</th>
+                                <th>Status</th>
+                                <th>Started At</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ride in active_rides %}
+                            <tr>
+                                <td>#{{ ride.id }}</td>
+                                <td>{{ ride.rider.get_full_name }}</td>
+                                <td>{{ ride.driver.get_full_name }}</td>
+                                <td>{{ ride.pickup_location }}</td>
+                                <td>{{ ride.dropoff_location }}</td>
+                                <td><span class="badge bg-primary">{{ ride.status }}</span></td>
+                                <td>{{ ride.created_at|date:"M d, Y H:i" }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center">No active rides</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Driver Approvals Section -->
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="table-container">
+                <h5>Pending Driver Approvals</h5>
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Driver Name</th>
+                                <th>Vehicle Info</th>
+                                <th>License Number</th>
+                                <th>Documents</th>
+                                <th>Applied On</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for driver in pending_approvals %}
+                            <tr>
+                                <td>{{ driver.user.get_full_name }}</td>
+                                <td>{{ driver.vehicle_make }} {{ driver.vehicle_model }} ({{ driver.vehicle_year }})</td>
+                                <td>{{ driver.license_number }}</td>
+                                <td>
+                                    <a href="{{ driver.license_image.url }}" target="_blank" class="btn btn-sm btn-outline-primary">License</a>
+                                    <a href="{{ driver.vehicle_registration.url }}" target="_blank" class="btn btn-sm btn-outline-primary">Registration</a>
+                                </td>
+                                <td>{{ driver.created_at|date:"M d, Y" }}</td>
+                                <td>
+                                    <form method="post" action="{% url 'approve_driver' driver.user.id %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-success">Approve</button>
+                                    </form>
+                                    <form method="post" action="{% url 'reject_driver' driver.user.id %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-danger">Reject</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="6" class="text-center">No pending approvals</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    // Initialize Revenue Chart
+    const ctx = document.getElementById('revenueChart').getContext('2d');
+    let revenueChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Revenue',
+                data: [],
+                borderColor: '#0d6efd',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return '₹' + value;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Load Revenue Data
+    function loadRevenueData(period) {
+        fetch(`/accounts/admin/revenue-data/?period=${period}`)
+            .then(response => response.json())
+            .then(data => {
+                revenueChart.data.labels = data.labels;
+                revenueChart.data.datasets[0].data = data.values;
+                revenueChart.update();
+            });
+    }
+
+    // Period selector event listeners
+    document.querySelectorAll('.period-selector').forEach(button => {
+        button.addEventListener('click', (e) => {
+            document.querySelectorAll('.period-selector').forEach(btn => btn.classList.remove('active'));
+            e.target.classList.add('active');
+            loadRevenueData(e.target.dataset.period);
+        });
+    });
+
+    // Initialize map
+    const map = L.map('map').setView([0, 0], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    const markers = {};
+    const routes = {};
+
+    // Update map data
+    function updateMapData() {
+        fetch('/accounts/admin/map-data/')
+            .then(response => response.json())
+            .then(data => {
+                // Update driver markers
+                data.drivers.forEach(driver => {
+                    if (markers[`driver-${driver.id}`]) {
+                        markers[`driver-${driver.id}`].setLatLng([driver.lat, driver.lng]);
+                    } else {
+                        markers[`driver-${driver.id}`] = L.marker([driver.lat, driver.lng], {
+                            icon: L.divIcon({
+                                html: '🚗',
+                                className: 'driver-marker'
+                            })
+                        }).addTo(map);
+                    }
+                });
+
+                // Update active rides
+                data.rides.forEach(ride => {
+                    if (routes[`ride-${ride.id}`]) {
+                        routes[`ride-${ride.id}`].setLatLngs([
+                            [ride.pickup_lat, ride.pickup_lng],
+                            [ride.dropoff_lat, ride.dropoff_lng]
+                        ]);
+                    } else {
+                        routes[`ride-${ride.id}`] = L.polyline([
+                            [ride.pickup_lat, ride.pickup_lng],
+                            [ride.dropoff_lat, ride.dropoff_lng]
+                        ], {color: '#0d6efd'}).addTo(map);
+                    }
+                });
+            });
+    }
+
+    // Initial loads
+    loadRevenueData('week');
+    updateMapData();
+    setInterval(updateMapData, 30000); // Update every 30 seconds
+</script>
+{% endblock %} 

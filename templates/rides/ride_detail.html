@@ -1,0 +1,1416 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Ride Details - Cabby{% endblock %}
+
+{% block extra_css %}
+<style>
+    body {
+        background-color: #f8f9fa;
+        background-image: url('https://images.unsplash.com/photo-1603844836380-14307d7b0bf0?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80');
+        background-size: cover;
+        background-attachment: fixed;
+        background-position: center;
+        background-blend-mode: overlay;
+    }
+    
+    /* Topbar Styling */
+    .custom-topbar {
+        background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+        padding: 15px 0;
+        margin-bottom: 30px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+    
+    .topbar-content {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    
+    .topbar-title {
+        color: white;
+        font-weight: 700;
+        margin: 0;
+        font-size: 1.5rem;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+    
+    .topbar-actions {
+        display: flex;
+        gap: 10px;
+    }
+    
+    .topbar-action-btn {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        color: white;
+        border-radius: 50px;
+        padding: 8px 18px;
+        font-size: 0.9rem;
+        backdrop-filter: blur(5px);
+        transition: all 0.3s;
+        font-weight: 500;
+    }
+    
+    .topbar-action-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+        transform: translateY(-2px);
+    }
+    
+    .card {
+        border: none;
+        border-radius: 15px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.05);
+        overflow: hidden;
+        transition: all 0.3s ease;
+    }
+    
+    .card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+    }
+    
+    .card-header {
+        background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+        color: white;
+        font-weight: 600;
+        border: none;
+        padding: 1.2rem 1.5rem;
+    }
+    
+    .progress-tracker {
+        margin: 20px 0;
+    }
+    
+    .progress-step {
+        text-align: center;
+        position: relative;
+        width: 18%;
+    }
+    
+    .progress-icon {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background-color: #e9ecef;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 10px;
+        position: relative;
+        z-index: 1;
+        transition: all 0.3s ease;
+        box-shadow: 0 0 0 5px rgba(233, 236, 239, 0.5);
+    }
+    
+    .progress-step.active .progress-icon {
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        color: white;
+        box-shadow: 0 0 0 5px rgba(56, 239, 125, 0.3);
+        transform: scale(1.1);
+    }
+    
+    .progress-text {
+        font-size: 0.85rem;
+        color: #6c757d;
+        transition: all 0.3s ease;
+    }
+    
+    .progress-step.active .progress-text {
+        color: #212529;
+        font-weight: 600;
+    }
+    
+    .ride-info-card {
+        transition: all 0.3s ease;
+        border-left: 5px solid;
+        border-image: linear-gradient(to bottom, #6a11cb, #2575fc) 1;
+    }
+    
+    .price-tag {
+        font-size: 1.5rem;
+        font-weight: bold;
+        background: -webkit-linear-gradient(45deg, #11998e, #38ef7d);
+        background: linear-gradient(45deg, #11998e, #38ef7d);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    
+    .map-container {
+        height: 400px;
+        border-radius: 15px;
+        overflow: hidden;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1);
+        border: 5px solid white;
+    }
+    
+    .action-button {
+        transition: all 0.3s;
+        border-radius: 50px;
+        padding: 0.5rem 1.5rem;
+        font-weight: 600;
+    }
+    
+    .action-button:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 7px 14px rgba(50, 50, 93, 0.1), 0 3px 6px rgba(0, 0, 0, 0.08);
+    }
+    
+    .status-badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        z-index: 100;
+        padding: 8px 15px;
+        border-radius: 50px;
+        font-weight: 600;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+    }
+    
+    .eta-display {
+        font-size: 1.2rem;
+        margin-top: 10px;
+        padding: 15px;
+        background: white;
+        border-radius: 10px;
+        border-left: 5px solid #6a11cb;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.05);
+    }
+    
+    .pulsing-dot {
+        display: inline-block;
+        width: 12px;
+        height: 12px;
+        background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        border-radius: 50%;
+        margin-right: 5px;
+        animation: pulse 1.5s infinite;
+    }
+    
+    @keyframes pulse {
+        0% {
+            transform: scale(0.8);
+            opacity: 0.8;
+            box-shadow: 0 0 0 0 rgba(56, 239, 125, 0.7);
+        }
+        70% {
+            transform: scale(1.2);
+            opacity: 1;
+            box-shadow: 0 0 0 10px rgba(56, 239, 125, 0);
+        }
+        100% {
+            transform: scale(0.8);
+            opacity: 0.8;
+            box-shadow: 0 0 0 0 rgba(56, 239, 125, 0);
+        }
+    }
+    
+    .chat-button {
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        width: 70px;
+        height: 70px;
+        background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+        color: white;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 10px 20px rgba(106, 17, 203, 0.3);
+        cursor: pointer;
+        z-index: 1000;
+        transition: all 0.3s;
+    }
+    
+    .chat-button:hover {
+        transform: rotate(15deg) scale(1.1);
+        box-shadow: 0 15px 30px rgba(106, 17, 203, 0.4);
+    }
+    
+    .chat-button i {
+        font-size: 1.5rem;
+    }
+    
+    .rating-stars {
+        font-size: 42px;
+        cursor: pointer;
+    }
+    
+    .rating-stars i {
+        transition: all 0.2s;
+        margin: 0 5px;
+    }
+    
+    .rating-stars i:hover {
+        transform: scale(1.3) rotate(5deg);
+        text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
+    }
+    
+    .profile-image {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        object-fit: cover;
+        border: 5px solid white;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    
+    .timeline-wrapper {
+        position: relative;
+        padding-left: 60px;
+    }
+    
+    .timeline-wrapper:before {
+        content: '';
+        position: absolute;
+        left: 30px;
+        top: 0;
+        height: 100%;
+        width: 2px;
+        background: linear-gradient(to bottom, #6a11cb, #2575fc);
+    }
+    
+    .timeline-item {
+        position: relative;
+        margin-bottom: 25px;
+    }
+    
+    .timeline-item:before {
+        content: '';
+        position: absolute;
+        left: -32px;
+        top: 0;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: white;
+        border: 3px solid #6a11cb;
+    }
+    
+    .timeline-item.active:before {
+        background: #38ef7d;
+    }
+    
+    .leaflet-marker-icon {
+        filter: drop-shadow(0 5px 5px rgba(0,0,0,0.3));
+    }
+    
+    .custom-marker {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background-color: white;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+        border: 3px solid;
+        font-size: 20px;
+    }
+    
+    .pickup-marker {
+        border-color: #6a11cb;
+        color: #6a11cb;
+    }
+    
+    .dropoff-marker {
+        border-color: #11998e;
+        color: #11998e;
+    }
+    
+    .driver-marker {
+        border-color: #f5365c;
+        color: #f5365c;
+        animation: bounce 1s infinite alternate;
+    }
+    
+    @keyframes bounce {
+        from { transform: translateY(0); }
+        to { transform: translateY(-10px); }
+    }
+    
+    .map-popup {
+        padding: 10px;
+        border-radius: 10px;
+        min-width: 150px;
+    }
+    
+    .leaflet-popup-content-wrapper {
+        border-radius: 10px;
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    
+    .leaflet-popup-tip {
+        box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    }
+    
+    .gradient-text {
+        background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+        background-clip: text;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 700;
+    }
+    
+    .custom-toast {
+        background: white;
+        border-radius: 10px;
+        padding: 15px;
+        box-shadow: 0 15px 35px rgba(50, 50, 93, 0.1), 0 5px 15px rgba(0, 0, 0, 0.07);
+        border-left: 5px solid #6a11cb;
+    }
+    
+    .leaflet-routing-container {
+        display: none;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Beautiful Topbar -->
+<div class="custom-topbar">
+    <div class="container">
+        <div class="topbar-content">
+            <div>
+                <h4 class="topbar-title">
+                    <i class="fas fa-route me-2"></i>Ride #{{ ride.id }}
+                </h4>
+                <div class="text-white-50 small">{{ ride.created_at|date:"M d, Y • h:i A" }}</div>
+            </div>
+            <div class="topbar-actions">
+                <a href="{% url 'ride_history' %}" class="topbar-action-btn">
+                    <i class="fas fa-history me-2"></i>All Rides
+                </a>
+                <button class="topbar-action-btn" onclick="window.print()">
+                    <i class="fas fa-print me-2"></i>Print
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container py-4">
+    <div class="row">
+        <div class="col-md-8">
+            <!-- Map -->
+            <div class="card mb-4">
+                <div class="card-body p-0">
+                    <div id="mapContainer" class="map-container"></div>
+                </div>
+            </div>
+            
+            <!-- Ride Details -->
+            <div class="card ride-info-card">
+                <div class="card-header">
+                    <h5 class="mb-0">Ride Details</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center mb-3">
+                                <div class="flex-shrink-0">
+                                    <i class="fas fa-map-marker-alt fa-2x text-primary"></i>
+                                </div>
+                                <div class="flex-grow-1 ms-3">
+                                    <label class="form-label text-muted mb-0">Pickup Location</label>
+                                    <p class="mb-0">{{ ride.pickup_location }}</p>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <div class="flex-shrink-0">
+                                    <i class="fas fa-map-marker fa-2x text-danger"></i>
+                                </div>
+                                <div class="flex-grow-1 ms-3">
+                                    <label class="form-label text-muted mb-0">Dropoff Location</label>
+                                    <p class="mb-0">{{ ride.dropoff_location }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <div class="d-flex align-items-center mb-3">
+                                <div class="flex-shrink-0">
+                                    <i class="fas fa-clock fa-2x text-primary"></i>
+                                </div>
+                                <div class="flex-grow-1 ms-3">
+                                    <label class="form-label text-muted mb-0">Booking Time</label>
+                                    <p class="mb-0">{{ ride.created_at|date:"M d, Y H:i" }}</p>
+                                </div>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                <div class="flex-shrink-0">
+                                    <i class="fas fa-money-bill fa-2x text-success"></i>
+                                </div>
+                                <div class="flex-grow-1 ms-3">
+                                    <label class="form-label text-muted mb-0">Fare</label>
+                                    <p class="mb-0">₹<span class="price-tag">{{ ride.fare|default:"--" }}</span></p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-12">
+                            <hr>
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <h6>Ride Status</h6>
+                            <div class="d-flex align-items-center">
+                                <span class="status-indicator status-{{ ride.status|lower }}"></span>
+                                <span class="text-capitalize">{{ ride.status }}</span>
+                                <span class="status-badge badge {% if ride.status == 'COMPLETED' %}bg-success{% elif ride.status == 'CANCELLED' %}bg-danger{% else %}bg-primary{% endif %}">{{ ride.get_status_display }}</span>
+                            </div>
+                            {% if ride.status == 'COMPLETED' %}
+                                <div class="mt-3">
+                                    <h6>Rating</h6>
+                                    {% if ride.rider_rating %}
+                                        <div class="rating-stars">
+                                            {% for i in "12345"|make_list %}
+                                                <i class="fas fa-star {% if forloop.counter <= ride.rider_rating %}text-warning{% else %}text-muted{% endif %}"></i>
+                                            {% endfor %}
+                                        </div>
+                                    {% else %}
+                                        <button class="btn btn-outline-primary btn-sm" data-bs-toggle="modal" data-bs-target="#ratingModal">
+                                            <i class="fas fa-star me-1"></i>Rate this ride
+                                        </button>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="col-md-6">
+                            <h6>Payment Details</h6>
+                            <p class="mb-1">Method: {{ ride.payment_method }}</p>
+                            <p class="mb-0">Status: 
+                                <span class="badge {% if ride.payment_status == 'PAID' %}bg-success{% else %}bg-warning{% endif %}">
+                                    {{ ride.payment_status }}
+                                </span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <!-- Rider Information (visible to driver) -->
+            {% if request.user == ride.driver %}
+                <div class="card mb-4">
+                    <div class="card-body text-center py-5">
+                        <div class="position-relative mb-4">
+                            <div class="profile-image d-flex align-items-center justify-content-center bg-primary text-white" style="font-size: 32px; margin: 0 auto;">
+                                {{ ride.rider.get_initials }}
+                            </div>
+                            <span class="position-absolute bottom-0 end-0 bg-success text-white rounded-circle p-2" style="transform: translate(20%, 20%);">
+                                <i class="fas fa-user-check"></i>
+                            </span>
+                        </div>
+                        <div>
+                            <h5 class="mb-1 gradient-text">{{ ride.rider.get_full_name }}</h5>
+                            <p class="text-muted mb-3">
+                                <i class="fas fa-star text-warning"></i> 
+                                {{ ride.rider.rider_profile.average_rating|default:"New Rider" }}
+                            </p>
+                        </div>
+                        <div class="d-flex justify-content-center gap-2">
+                            <a href="tel:{{ ride.rider.phone_number }}" class="btn btn-outline-primary action-button">
+                                <i class="fas fa-phone"></i>
+                            </a>
+                            <a href="{% url 'chat:chat_room' ride.id %}" class="btn btn-outline-primary action-button">
+                                <i class="fas fa-comments"></i>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+            
+            <!-- Driver Information (visible to rider) -->
+            {% if request.user == ride.rider and ride.driver %}
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5 class="mb-0">Your Driver</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row align-items-center">
+                            <div class="col-md-4 text-center">
+                                <div class="position-relative">
+                                    <div class="profile-image d-flex align-items-center justify-content-center bg-primary text-white">
+                                        {{ ride.driver.get_initials }}
+                                    </div>
+                                    <span class="position-absolute bottom-0 end-0 bg-primary text-white rounded-circle p-2" style="transform: translate(20%, 20%);">
+                                        <i class="fas fa-car"></i>
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="col-md-8">
+                                <h5 class="gradient-text mb-2">{{ ride.driver.get_full_name }}</h5>
+                                <div class="mb-2">
+                                    <span class="badge bg-light text-dark">
+                                        <i class="fas fa-star text-warning"></i> 
+                                        {{ ride.driver.driver_profile.average_rating|default:"New Driver" }}
+                                    </span>
+                                    <span class="badge bg-light text-dark">
+                                        <i class="fas fa-road text-primary"></i> 
+                                        {{ ride.driver.driver_profile.total_rides|default:"0" }} rides
+                                    </span>
+                                </div>
+                                <div class="mb-3">
+                                    <small class="text-muted d-block mb-1">Vehicle</small>
+                                    <p class="mb-0">{{ ride.driver.driver_profile.vehicle_make }} {{ ride.driver.driver_profile.vehicle_model }}</p>
+                                    <p class="badge bg-dark">{{ ride.driver.driver_profile.vehicle_number }}</p>
+                                </div>
+                                <div class="d-flex justify-content-center gap-2 mb-4">
+                                    <a href="tel:{{ ride.driver.phone_number }}" class="btn btn-outline-primary action-button">
+                                        <i class="fas fa-phone"></i>
+                                    </a>
+                                    <a href="{% url 'chat:chat_room' ride.id %}" class="btn btn-outline-primary action-button">
+                                        <i class="fas fa-comments"></i>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+            
+            <!-- Actions -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Ride Actions</h5>
+                </div>
+                <div class="card-body">
+                    {% if request.user == ride.rider %}
+                        {% if ride.status == 'PENDING' %}
+                            <form method="post" action="{% url 'cancel_ride' ride.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-danger w-100 action-button">
+                                    <i class="fas fa-times-circle me-2"></i>Cancel Ride
+                                </button>
+                            </form>
+                            <div class="card mt-3 bg-light">
+                                <div class="card-body p-3">
+                                    <div class="d-flex align-items-center">
+                                        <div class="spinner-border spinner-border-sm text-primary me-2" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                        <span>Looking for a driver...</span>
+                                    </div>
+                                </div>
+                            </div>
+                        {% elif ride.status == 'ACCEPTED' %}
+                            <div class="card bg-light mb-3">
+                                <div class="card-body p-3">
+                                    <div class="d-flex align-items-center">
+                                        <div class="pulsing-dot"></div>
+                                        <span>Driver is on the way</span>
+                                    </div>
+                                    <div class="d-flex align-items-center mt-2">
+                                        <span class="badge bg-light text-primary me-2">ETA</span>
+                                        <span id="driver-eta" class="fw-bold">Calculating...</span>
+                                    </div>
+                                    <div class="d-flex align-items-center mt-2">
+                                        <span class="badge bg-light text-secondary me-2">Arrival</span>
+                                        <span id="arrival-time" class="fw-bold">--:--</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="d-grid">
+                                <button class="btn btn-outline-primary mb-2 action-button" type="button" onclick="callDriver()">
+                                    <i class="fas fa-phone me-2"></i>Call Driver
+                                </button>
+                                <a href="{% url 'chat:chat_room' ride.id %}" class="btn btn-outline-info mb-2 action-button">
+                                    <i class="fas fa-comments me-2"></i>Chat with Driver
+                                </a>
+                                <form method="post" action="{% url 'cancel_ride' ride.id %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-danger w-100 action-button">
+                                        <i class="fas fa-times-circle me-2"></i>Cancel Ride
+                                    </button>
+                                </form>
+                            </div>
+                        {% elif ride.status == 'STARTED' or ride.status == 'IN_PROGRESS' %}
+                            <div class="card bg-light mb-3">
+                                <div class="card-body p-3">
+                                    <div class="d-flex align-items-center mb-2">
+                                        <div class="pulsing-dot"></div>
+                                        <span>Ride in progress</span>
+                                    </div>
+                                    <div class="d-flex align-items-center mt-2">
+                                        <span class="badge bg-light text-primary me-2">Time to destination</span>
+                                        <span id="eta-display" class="fw-bold">Loading...</span>
+                                        <span class="pulsing-dot"></span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-outline-primary action-button" type="button" onclick="callDriver()">
+                                    <i class="fas fa-phone me-2"></i>Call Driver
+                                </button>
+                                <a href="{% url 'chat:chat_room' ride.id %}" class="btn btn-outline-info mb-2 action-button">
+                                    <i class="fas fa-comments me-2"></i>Chat with Driver
+                                </a>
+                            </div>
+                        {% elif ride.status == 'COMPLETED' %}
+                            <button class="btn btn-primary w-100 action-button" data-bs-toggle="modal" data-bs-target="#ratingModal">
+                                <i class="fas fa-star me-2"></i>Rate this Ride
+                            </button>
+                        {% endif %}
+                    {% elif request.user == ride.driver %}
+                        {% if ride.status == 'PENDING' %}
+                            <form method="post" action="{% url 'accept_ride' ride.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-primary w-100 mb-2 action-button">
+                                    <i class="fas fa-check-circle me-2"></i>Accept Ride
+                                </button>
+                            </form>
+                        {% elif ride.status == 'ACCEPTED' %}
+                            <form method="post" action="{% url 'start_ride' ride.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-primary w-100 mb-2 action-button">
+                                    <i class="fas fa-play-circle me-2"></i>Start Ride
+                                </button>
+                            </form>
+                            <form method="post" action="{% url 'cancel_ride' ride.id %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-danger w-100 action-button">
+                                    <i class="fas fa-times-circle me-2"></i>Cancel Ride
+                                </button>
+                            </form>
+                        {% elif ride.status == 'STARTED' or ride.status == 'IN_PROGRESS' %}
+                            <div class="d-grid gap-2">
+                                <form method="post" action="{% url 'complete_ride' ride.id %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-success w-100 mb-2 action-button">
+                                        <i class="fas fa-check-circle me-2"></i>Complete Ride
+                                    </button>
+                                </form>
+                                <a href="{% url 'chat:chat_room' ride.id %}" class="btn btn-outline-info mb-2 action-button">
+                                    <i class="fas fa-comments me-2"></i>Chat with Rider
+                                </a>
+                                <form method="post" action="{% url 'cancel_ride' ride.id %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-danger w-100 action-button">
+                                        <i class="fas fa-times-circle me-2"></i>Cancel Ride
+                                    </button>
+                                </form>
+                            </div>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+            
+            <!-- Ride Timeline -->
+            <div class="card mt-4">
+                <div class="card-header">
+                    <h5 class="mb-0">Ride Timeline</h5>
+                </div>
+                <div class="card-body">
+                    <div class="timeline-wrapper">
+                        <div class="timeline-item {% if ride.status != 'CANCELLED' %}active{% endif %}">
+                            <div class="mb-1 fw-bold">Ride Requested</div>
+                            <div class="text-muted small">{{ ride.created_at|date:"M d, Y • h:i A" }}</div>
+                        </div>
+                        
+                        {% if ride.status != 'REQUESTED' and ride.status != 'CANCELLED' or ride.driver %}
+                        <div class="timeline-item {% if ride.status != 'REQUESTED' and ride.status != 'CANCELLED' %}active{% endif %}">
+                            <div class="mb-1 fw-bold">Driver Assigned</div>
+                            <div class="text-muted small">
+                                {{ ride.driver.get_full_name }}
+                                {% if ride.accepted_at %}
+                                • {{ ride.accepted_at|date:"M d, Y • h:i A" }}
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if ride.status == 'STARTED' or ride.status == 'IN_PROGRESS' or ride.status == 'COMPLETED' %}
+                        <div class="timeline-item active">
+                            <div class="mb-1 fw-bold">Ride Started</div>
+                            <div class="text-muted small">
+                                {% if ride.started_at %}
+                                {{ ride.started_at|date:"M d, Y • h:i A" }}
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endif %}
+                        
+                        {% if ride.status == 'COMPLETED' %}
+                        <div class="timeline-item active">
+                            <div class="mb-1 fw-bold">Ride Completed</div>
+                            <div class="text-muted small">
+                                {% if ride.completed_at %}
+                                {{ ride.completed_at|date:"M d, Y • h:i A" }}
+                                {% endif %}
+                            </div>
+                            {% if ride.fare %}
+                            <div class="mt-2 p-2 bg-light rounded">
+                                <div class="d-flex justify-content-between">
+                                    <span>Fare:</span>
+                                    <span class="fw-bold">₹{{ ride.fare }}</span>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span>Distance:</span>
+                                    <span>{{ ride.distance|floatformat:1 }} km</span>
+                                </div>
+                                <div class="d-flex justify-content-between">
+                                    <span>Duration:</span>
+                                    <span>{{ ride.duration|default:0 }} min</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        {% if ride.status == 'CANCELLED' %}
+                        <div class="timeline-item active">
+                            <div class="mb-1 fw-bold">Ride Cancelled</div>
+                            <div class="text-muted small">
+                                {% if ride.cancelled_at %}
+                                {{ ride.cancelled_at|date:"M d, Y • h:i A" }}
+                                {% endif %}
+                            </div>
+                            {% if ride.cancellation_reason %}
+                            <div class="mt-2 p-2 bg-light rounded">
+                                <div class="text-muted small">Reason: {{ ride.cancellation_reason }}</div>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Rating Modal -->
+<div class="modal fade" id="ratingModal" tabindex="-1" aria-labelledby="ratingModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow">
+            <div class="modal-header border-0 bg-gradient-primary text-white" style="background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);">
+                <h5 class="modal-title" id="ratingModalLabel">Rate Your Ride</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body text-center py-4">
+                <div class="mb-4">
+                    <img src="https://images.unsplash.com/photo-1511632765486-a01980e01a18?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&h=200&q=80" 
+                         alt="Rating" class="img-fluid rounded mb-3" style="max-height: 150px; object-fit: cover;">
+                    <h5>How was your ride with {{ ride.driver.get_full_name }}?</h5>
+                    <p class="text-muted">Your feedback helps us improve the service</p>
+                </div>
+                
+                <form id="ratingForm" method="post" action="{% url 'rate_ride' ride.id %}">
+                    {% csrf_token %}
+                    <div class="rating-container mb-4">
+                        <div class="rating-stars mb-2">
+                            <i class="far fa-star text-muted" data-rating="1"></i>
+                            <i class="far fa-star text-muted" data-rating="2"></i>
+                            <i class="far fa-star text-muted" data-rating="3"></i>
+                            <i class="far fa-star text-muted" data-rating="4"></i>
+                            <i class="far fa-star text-muted" data-rating="5"></i>
+                        </div>
+                        <input type="hidden" name="rating" id="rating" value="">
+                        <div id="rating-label" class="mb-3 fs-5 fw-bold gradient-text">Select a rating</div>
+                    </div>
+                    
+                    <div class="form-floating mb-4">
+                        <textarea class="form-control" placeholder="Leave a comment" name="feedback" id="feedback" style="height: 120px; border-radius: 15px;"></textarea>
+                        <label for="feedback">Additional feedback (optional)</label>
+                    </div>
+                    
+                    <button type="submit" id="rating-submit" class="btn btn-primary btn-lg action-button" disabled>
+                        <i class="fas fa-paper-plane me-2"></i>Submit Rating
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast container for notifications -->
+<div id="toast-container" class="toast-container position-fixed bottom-0 end-0 p-3"></div>
+
+<!-- Chat Button -->
+<a href="{% url 'chat:chat_room' ride.id %}" class="btn chat-button">
+    <i class="fas fa-comments"></i>
+</a>
+
+<!-- Feedback button -->
+<div class="position-fixed bottom-0 start-0 p-3" style="z-index: 1000;">
+    <button class="btn btn-light rounded-circle shadow-lg p-3" 
+            style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white;" 
+            data-bs-toggle="tooltip" 
+            data-bs-placement="right" 
+            title="Give Feedback">
+        <i class="fas fa-bullhorn"></i>
+    </button>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+
+<!-- Initialize variables from Django context (kept separate to avoid JS linting issues) -->
+<script type="text/template" id="cabby-context">
+{
+    "ride": {
+        "id": {% if ride.id %}{{ ride.id }}{% else %}null{% endif %},
+        "status": "{{ ride.status|default:'UNKNOWN' }}",
+        "pickupLat": {% if ride.pickup_latitude %}{{ ride.pickup_latitude }}{% else %}null{% endif %},
+        "pickupLng": {% if ride.pickup_longitude %}{{ ride.pickup_longitude }}{% else %}null{% endif %},
+        "dropoffLat": {% if ride.dropoff_latitude %}{{ ride.dropoff_latitude }}{% else %}null{% endif %},
+        "dropoffLng": {% if ride.dropoff_longitude %}{{ ride.dropoff_longitude }}{% else %}null{% endif %},
+        "pickupAddress": "{{ ride.pickup_address|default:'' }}",
+        "dropoffAddress": "{{ ride.dropoff_address|default:'' }}",
+        "driverLat": {% if ride.driver and ride.driver.driverprofile.current_latitude %}{{ ride.driver.driverprofile.current_latitude }}{% else %}null{% endif %},
+        "driverLng": {% if ride.driver and ride.driver.driverprofile.current_longitude %}{{ ride.driver.driverprofile.current_longitude }}{% else %}null{% endif %}
+    },
+    "user": {
+        "id": {{ request.user.id }},
+        "type": "{% if request.user.is_driver %}driver{% else %}rider{% endif %}"
+    },
+    "config": {
+        "webSocket": {
+            "port": {% if WEBSOCKET_PORT %}{{ WEBSOCKET_PORT }}{% else %}8001{% endif %}
+        }
+    }
+}
+</script>
+
+<script>
+    // Initialize context from template
+    window.CABBY = (function() {
+        try {
+            const contextElement = document.getElementById('cabby-context');
+            return JSON.parse(contextElement.textContent);
+        } catch (error) {
+            console.error('Error initializing context:', error);
+            return { ride: {}, user: {}, config: { webSocket: { port: 8001 } } };
+        }
+    })();
+    
+    // Global variables
+    const rideId = window.CABBY.ride.id;
+    let rideStatus = window.CABBY.ride.status;
+    let map;
+    let pickupMarker;
+    let dropoffMarker;
+    let driverMarker;
+    let routeControl;
+    let chatSocket;
+    let notificationSocket;
+    
+    const pickupLat = window.CABBY.ride.pickupLat;
+    const pickupLng = window.CABBY.ride.pickupLng;
+    const dropoffLat = window.CABBY.ride.dropoffLat;
+    const dropoffLng = window.CABBY.ride.dropoffLng;
+    const driverLat = window.CABBY.ride.driverLat;
+    const driverLng = window.CABBY.ride.driverLng;
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize map and markers
+        initializeMap();
+        
+        // Initialize real-time connections
+        setupChatSocket();
+        setupNotificationSocket();
+        
+        // Set up polling fallbacks
+        setupStatusPolling();
+        
+        // Initialize UI elements
+        initializeUI();
+    });
+    
+    // Setup notification WebSocket for real-time updates
+    function setupNotificationSocket() {
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const hostname = window.location.hostname;
+        const wsUrl = `${wsProtocol}//${hostname}:${window.CABBY.config.webSocket.port}/notifications/`;
+        
+        console.log('Connecting to notifications WebSocket at:', wsUrl);
+        
+        try {
+            notificationSocket = new WebSocket(wsUrl);
+            
+            notificationSocket.onopen = function(e) {
+                console.log('Notification WebSocket connection established');
+                clearInterval(statusPollingInterval); // Stop polling if WebSocket works
+            };
+            
+            notificationSocket.onmessage = function(e) {
+                const data = JSON.parse(e.data);
+                console.log('Notification received:', data);
+                
+                if (data.type === 'ride_status_update' && data.ride_id == rideId) {
+                    // Update ride status without page refresh
+                    updateRideStatus(data.status);
+                    
+                    if (data.message) {
+                        showNotification(data.message);
+                    }
+                    
+                    // If ride is completed or cancelled and there's a redirect URL
+                    if (['COMPLETED', 'CANCELLED'].includes(data.status) && data.redirect_url) {
+                        setTimeout(() => {
+                            window.location.href = data.redirect_url;
+                        }, 3000);
+                    }
+                }
+            };
+            
+            notificationSocket.onclose = function(e) {
+                console.log('Notification WebSocket connection closed');
+                // Start polling instead
+                setupStatusPolling();
+                
+                // Try to reconnect after 10 seconds
+                setTimeout(setupNotificationSocket, 10000);
+            };
+            
+            notificationSocket.onerror = function(e) {
+                console.error('Notification WebSocket error:', e);
+                // Fall back to polling on error
+                setupStatusPolling();
+            };
+        } catch (error) {
+            console.error('Error setting up WebSocket:', error);
+            // Fall back to polling if WebSocket setup fails
+            setupStatusPolling();
+        }
+    }
+    
+    // Set up polling for ride status
+    let statusPollingInterval = null;
+    
+    function setupStatusPolling() {
+        if (statusPollingInterval) {
+            clearInterval(statusPollingInterval);
+        }
+        
+        // Poll for ride status every 5 seconds
+        statusPollingInterval = setInterval(fetchRideStatus, 5000);
+        console.log('Started ride status polling');
+    }
+
+    // Function to fetch the latest ride status
+    function fetchRideStatus() {
+        fetch(`/rides/${rideId}/status/`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('Network response was not ok');
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.status && data.status !== rideStatus) {
+                    updateRideStatus(data.status);
+                    
+                    if (data.message) {
+                        showNotification(data.message);
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error fetching ride status:', error);
+            });
+    }
+
+    // Function to update UI based on ride status changes
+    function updateRideStatus(newStatus) {
+        if (newStatus === rideStatus) return;
+        
+        console.log(`Ride status updated: ${rideStatus} -> ${newStatus}`);
+        
+        // Update global status
+        rideStatus = newStatus;
+        
+        // Update status badge
+        const statusBadge = document.querySelector('.status-badge');
+        if (statusBadge) {
+            statusBadge.textContent = newStatus.replace('_', ' ');
+            
+            // Update badge color
+            statusBadge.classList.remove('bg-warning', 'bg-info', 'bg-primary', 'bg-success', 'bg-danger');
+            
+            if (newStatus === 'COMPLETED') {
+                statusBadge.classList.add('bg-success');
+            } else if (newStatus === 'CANCELLED') {
+                statusBadge.classList.add('bg-danger');
+            } else if (newStatus === 'ACCEPTED') {
+                statusBadge.classList.add('bg-info');
+            } else if (newStatus === 'REQUESTED') {
+                statusBadge.classList.add('bg-warning');
+            } else {
+                statusBadge.classList.add('bg-primary');
+            }
+        }
+        
+        // Update progress bar if exists
+        const progressBar = document.getElementById('ride-progress-bar');
+        if (progressBar) {
+            const progressValues = {
+                'REQUESTED': 20,
+                'ACCEPTED': 40,
+                'ARRIVED': 60,
+                'STARTED': 80,
+                'COMPLETED': 100,
+                'CANCELLED': 0
+            };
+            
+            progressBar.style.width = `${progressValues[newStatus] || 0}%`;
+        }
+        
+        // Update action buttons visibility based on status
+        updateActionButtons(newStatus);
+        
+        // If completed or cancelled and rating section exists, show it
+        if (['COMPLETED', 'CANCELLED'].includes(newStatus)) {
+            const ratingSection = document.getElementById('rating-section');
+            if (ratingSection) {
+                ratingSection.classList.remove('d-none');
+            }
+        }
+    }
+
+    // Update action buttons based on ride status
+    function updateActionButtons(status) {
+        const actionButtons = document.getElementById('action-buttons');
+        if (!actionButtons) return;
+        
+        const cancelButton = document.getElementById('cancel-ride-btn');
+        const callButton = document.getElementById('call-driver-btn');
+        
+        if (['COMPLETED', 'CANCELLED'].includes(status)) {
+            // Hide all action buttons if ride is complete or cancelled
+            if (cancelButton) cancelButton.classList.add('d-none');
+            if (callButton) callButton.classList.add('d-none');
+        } else {
+            // Show appropriate buttons based on status
+            if (cancelButton) {
+                cancelButton.classList.remove('d-none');
+                // Only allow cancellation before ride has started
+                cancelButton.disabled = status === 'STARTED';
+            }
+            
+            if (callButton) {
+                callButton.classList.remove('d-none');
+                // Only show call button once driver is assigned
+                callButton.classList.toggle('d-none', status === 'REQUESTED');
+            }
+        }
+    }
+
+    // Set up chat socket connection
+    function setupChatSocket() {
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const hostname = window.location.hostname;
+        const wsUrl = `${wsProtocol}//${hostname}:${window.CABBY.config.webSocket.port}/chat/${rideId}/`;
+        
+        console.log('Connecting to chat WebSocket at:', wsUrl);
+        
+        try {
+            chatSocket = new WebSocket(wsUrl);
+            
+            chatSocket.onopen = function(e) {
+                console.log('Chat WebSocket connection established');
+                // Update connection status if element exists
+                const connectionStatus = document.getElementById('connection-status');
+                if (connectionStatus) {
+                    connectionStatus.innerHTML = '<span class="text-success"><i class="fas fa-circle"></i> Connected</span>';
+                }
+            };
+            
+            chatSocket.onmessage = function(e) {
+                const data = JSON.parse(e.data);
+                console.log('Chat message received:', data);
+                
+                // Handle chat message
+                if (data.message && data.sender) {
+                    addChatMessage(data);
+                }
+            };
+            
+            chatSocket.onclose = function(e) {
+                console.log('Chat WebSocket connection closed');
+                // Update connection status if element exists
+                const connectionStatus = document.getElementById('connection-status');
+                if (connectionStatus) {
+                    connectionStatus.innerHTML = '<span class="text-danger"><i class="fas fa-circle"></i> Disconnected</span>';
+                }
+                
+                // Try to reconnect after 5 seconds
+                setTimeout(setupChatSocket, 5000);
+            };
+            
+            chatSocket.onerror = function(e) {
+                console.error('Chat WebSocket error:', e);
+            };
+        } catch (error) {
+            console.error('Error setting up chat WebSocket:', error);
+        }
+    }
+
+    // Add a chat message to the chat container
+    function addChatMessage(data) {
+        const chatContainer = document.getElementById('chat-messages');
+        if (!chatContainer) return;
+        
+        const isCurrentUser = data.sender_id == window.CABBY.user.id;
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.className = isCurrentUser ? 
+            'chat-message chat-message-right mb-2' : 
+            'chat-message chat-message-left mb-2';
+        
+        messageDiv.innerHTML = `
+            <div class="message-bubble p-2 ${isCurrentUser ? 'bg-primary text-white' : 'bg-light'}">
+                <div class="message-content">${data.message}</div>
+                <div class="message-time small ${isCurrentUser ? 'text-white-50' : 'text-muted'}">${data.timestamp || 'Just now'}</div>
+            </div>
+        `;
+        
+        chatContainer.appendChild(messageDiv);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+        
+        // Play notification sound for incoming messages (not from current user)
+        if (!isCurrentUser) {
+            playNotificationSound();
+        }
+    }
+
+    // Function to show notifications
+    function showNotification(message) {
+        // Check if notification container exists, create if not
+        let toastContainer = document.getElementById('toast-container');
+        if (!toastContainer) {
+            toastContainer = document.createElement('div');
+            toastContainer.id = 'toast-container';
+            toastContainer.className = 'position-fixed bottom-0 end-0 p-3';
+            toastContainer.style.zIndex = '1050';
+            document.body.appendChild(toastContainer);
+        }
+        
+        // Create toast element
+        const toastId = 'toast-' + Date.now();
+        const toast = document.createElement('div');
+        toast.id = toastId;
+        toast.className = 'toast';
+        toast.setAttribute('role', 'alert');
+        toast.setAttribute('aria-live', 'assertive');
+        toast.setAttribute('aria-atomic', 'true');
+        
+        toast.innerHTML = `
+            <div class="toast-header">
+                <strong class="me-auto">Cabby</strong>
+                <small>Just now</small>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body">${message}</div>
+        `;
+        
+        toastContainer.appendChild(toast);
+        
+        // Initialize and show the toast
+        const bsToast = new bootstrap.Toast(toast, {
+            delay: 5000,
+            autohide: true
+        });
+        bsToast.show();
+        
+        // Play notification sound
+        playNotificationSound();
+        
+        // Try browser notifications if supported
+        if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('Cabby', {
+                body: message,
+                icon: '/static/images/logo.png'
+            });
+        } else if ('Notification' in window && Notification.permission !== 'denied') {
+            Notification.requestPermission().then(permission => {
+                if (permission === 'granted') {
+                    new Notification('Cabby', {
+                        body: message,
+                        icon: '/static/images/logo.png'
+                    });
+                }
+            });
+        }
+    }
+
+    // Play notification sound
+    function playNotificationSound() {
+        const audio = new Audio('/static/sounds/notification.mp3');
+        audio.volume = 0.5;
+        audio.play().catch(e => console.log('Error playing notification sound:', e));
+    }
+
+    // Initialize map and UI elements for the ride
+    function initializeMap() {
+        // Create map
+        map = L.map('mapContainer').setView([pickupLat || 20.5937, pickupLng || 78.9629], 13);
+        
+        // Add tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 18
+        }).addTo(map);
+        
+        // Add pickup marker with custom icon
+        if (pickupLat && pickupLng) {
+            const pickupIcon = L.divIcon({
+                html: '<div class="custom-marker pickup-marker"><i class="fas fa-map-marker-alt"></i></div>',
+                className: '',
+                iconSize: [40, 40],
+                iconAnchor: [20, 40]
+            });
+            
+            pickupMarker = L.marker([pickupLat, pickupLng], {icon: pickupIcon}).addTo(map);
+            pickupMarker.bindPopup('<div class="map-popup"><b>Pickup Location</b><br>{{ ride.pickup_address }}</div>').openPopup();
+        }
+        
+        // Add dropoff marker with custom icon
+        if (dropoffLat && dropoffLng) {
+            const dropoffIcon = L.divIcon({
+                html: '<div class="custom-marker dropoff-marker"><i class="fas fa-flag-checkered"></i></div>',
+                className: '',
+                iconSize: [40, 40],
+                iconAnchor: [20, 40]
+            });
+            
+            dropoffMarker = L.marker([dropoffLat, dropoffLng], {icon: dropoffIcon}).addTo(map);
+            dropoffMarker.bindPopup('<div class="map-popup"><b>Dropoff Location</b><br>{{ ride.dropoff_address }}</div>');
+        }
+        
+        // Add route between markers if both exist
+        if (pickupLat && pickupLng && dropoffLat && dropoffLng) {
+            routeControl = L.Routing.control({
+                waypoints: [
+                    L.latLng(pickupLat, pickupLng),
+                    L.latLng(dropoffLat, dropoffLng)
+                ],
+                routeWhileDragging: false,
+                showAlternatives: false,
+                createMarker: function() { return null; } // Don't create default markers
+            }).addTo(map);
+            
+            // Fit map to bounds
+            const bounds = L.latLngBounds([
+                [pickupLat, pickupLng],
+                [dropoffLat, dropoffLng]
+            ]);
+            map.fitBounds(bounds, {padding: [50, 50]});
+        }
+        
+        // Add driver marker if available
+        if (driverLat && driverLng) {
+            const driverIcon = L.divIcon({
+                html: '<div class="custom-marker driver-marker"><i class="fas fa-car"></i></div>',
+                className: '',
+                iconSize: [40, 40],
+                iconAnchor: [20, 20]
+            });
+            
+            driverMarker = L.marker([driverLat, driverLng], {icon: driverIcon}).addTo(map);
+            driverMarker.bindPopup('<div class="map-popup"><b>Driver Location</b><br>On the way</div>');
+        }
+    }
+
+    // Initialize UI elements
+    function initializeUI() {
+        // Set initial status styles
+        updateRideStatus(rideStatus);
+        
+        // Initialize any form submissions
+        const chatForm = document.getElementById('chat-form');
+        if (chatForm) {
+            chatForm.addEventListener('submit', function(e) {
+                e.preventDefault();
+                
+                const messageInput = document.getElementById('chat-message');
+                if (!messageInput || !messageInput.value.trim()) return;
+                
+                const message = messageInput.value.trim();
+                
+                if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+                    chatSocket.send(JSON.stringify({
+                        'message': message,
+                        'ride_id': rideId,
+                        'sender_id': window.CABBY.user.id
+                    }));
+                }
+                
+                messageInput.value = '';
+            });
+        }
+        
+        // Initialize rating system
+        initializeRatingSystem();
+    }
+
+    // Initialize rating system
+    function initializeRatingSystem() {
+        const stars = document.querySelectorAll('.rating-star');
+        if (!stars.length) return;
+        
+        const ratingInput = document.getElementById('rating-input');
+        const ratingLabel = document.getElementById('rating-label');
+        
+        stars.forEach((star, index) => {
+            const rating = index + 1;
+            
+            star.addEventListener('click', () => {
+                // Update input value
+                if (ratingInput) ratingInput.value = rating;
+                
+                // Update stars appearance
+                stars.forEach((s, i) => {
+                    if (i < rating) {
+                        s.classList.remove('far');
+                        s.classList.add('fas', 'text-warning');
+                    } else {
+                        s.classList.remove('fas', 'text-warning');
+                        s.classList.add('far');
+                    }
+                });
+                
+                // Update label
+                if (ratingLabel) {
+                    const labels = ['Poor', 'Fair', 'Good', 'Very Good', 'Excellent'];
+                    ratingLabel.textContent = labels[index];
+                }
+            });
+            
+            // Add hover effect
+            star.addEventListener('mouseenter', () => {
+                stars.forEach((s, i) => {
+                    if (i <= index) {
+                        s.classList.remove('far');
+                        s.classList.add('fas', 'text-warning');
+                    }
+                });
+            });
+            
+            star.addEventListener('mouseleave', () => {
+                const currentRating = parseInt(ratingInput?.value || 0);
+                
+                stars.forEach((s, i) => {
+                    if (i < currentRating) {
+                        s.classList.remove('far');
+                        s.classList.add('fas', 'text-warning');
+                    } else {
+                        s.classList.remove('fas', 'text-warning');
+                        s.classList.add('far');
+                    }
+                });
+            });
+        });
+    }
+</script>
+{% endblock %}

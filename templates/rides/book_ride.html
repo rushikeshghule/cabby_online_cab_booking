@@ -1,0 +1,798 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Book a Ride - Cabby{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+<style>
+/* Marker styles */
+.pickup-marker {
+    color: #007bff;
+    font-size: 24px;
+}
+
+.dropoff-marker {
+    color: #dc3545;
+    font-size: 24px;
+}
+
+/* Driver avatar styles */
+.driver-avatar {
+    width: 40px;
+    height: 40px;
+    overflow: hidden;
+    border-radius: 50%;
+}
+
+.driver-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.avatar-placeholder {
+    width: 100%;
+    height: 100%;
+    background-color: #007bff;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+/* Loading spinner styles */
+.spinner-border {
+    width: 3rem;
+    height: 3rem;
+}
+
+/* Fare estimate styles */
+.fare-breakdown {
+    background-color: #f8f9fa;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-top: 1rem;
+    text-align: left;
+}
+
+.fare-breakdown div {
+    margin-bottom: 0.25rem;
+}
+
+.fare-breakdown div:last-child {
+    margin-bottom: 0;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row">
+        <div class="col-md-8">
+            <!-- Map -->
+            <div class="card mb-4">
+                <div class="card-body p-0">
+                    <div id="map" class="map-container"></div>
+                </div>
+            </div>
+            
+            <!-- Ride Form -->
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title mb-4">Book Your Ride</h5>
+                    <form id="bookingForm" method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="pickup_latitude" id="pickup_latitude">
+                        <input type="hidden" name="pickup_longitude" id="pickup_longitude">
+                        <input type="hidden" name="dropoff_latitude" id="dropoff_latitude">
+                        <input type="hidden" name="dropoff_longitude" id="dropoff_longitude">
+                        <input type="hidden" name="fare" id="fare">
+                        
+                        <div class="mb-3">
+                            <label for="pickup_location" class="form-label">Pickup Location</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-map-marker-alt"></i></span>
+                                <input type="text" class="form-control" id="pickup_location" name="pickup_location" required>
+                                <button type="button" class="btn btn-outline-primary" onclick="useCurrentLocation()">
+                                    <i class="fas fa-location-arrow"></i>
+                                </button>
+                            </div>
+                            {% if user.rider_profile.home_address or user.rider_profile.work_address %}
+                                <div class="mt-2">
+                                    {% if user.rider_profile.home_address %}
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="useAddress('home')">
+                                            <i class="fas fa-home"></i> Home
+                                        </button>
+                                    {% endif %}
+                                    {% if user.rider_profile.work_address %}
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="useAddress('work')">
+                                            <i class="fas fa-building"></i> Work
+                                        </button>
+                                    {% endif %}
+                                </div>
+                            {% endif %}
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="dropoff_location" class="form-label">Dropoff Location</label>
+                            <div class="input-group">
+                                <span class="input-group-text"><i class="fas fa-map-marker"></i></span>
+                                <input type="text" class="form-control" id="dropoff_location" name="dropoff_location" required>
+                            </div>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="vehicle_type" class="form-label">Vehicle Type</label>
+                            <select class="form-select" id="vehicle_type" name="vehicle_type" required>
+                                <option value="SEDAN">Sedan</option>
+                                <option value="SUV">SUV</option>
+                                <option value="VAN">Van</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="payment_method" class="form-label">Payment Method</label>
+                            <select class="form-select" id="payment_method" name="payment_method" required>
+                                <option value="CASH">Cash</option>
+                                <option value="CARD">Credit/Debit Card</option>
+                                <option value="WALLET">Wallet Balance</option>
+                            </select>
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="notes" class="form-label">Additional Notes</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="2" placeholder="Any special instructions for the driver..."></textarea>
+                        </div>
+                        
+                        <div class="d-grid">
+                            <button type="submit" class="btn btn-primary btn-lg" id="bookButton" disabled>
+                                <i class="fas fa-taxi me-2"></i>Book Now
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-4">
+            <!-- Fare Estimate -->
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Fare Estimate</h5>
+                    <div id="fareEstimate" class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Available Drivers -->
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Nearby Drivers</h5>
+                </div>
+                <div class="list-group list-group-flush" id="nearbyDrivers">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Booking Confirmation Modal -->
+<div class="modal fade" id="bookingModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Booking Confirmation</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="text-center">
+                    <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+                    <h4>Ride Booked Successfully!</h4>
+                    <p class="text-muted">Your ride has been booked. Looking for nearby drivers...</p>
+                    <div class="spinner-border text-primary mt-3" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- jQuery -->
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<!-- Leaflet -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Leaflet Routing Machine -->
+<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let map;
+    let pickupMarker;
+    let dropoffMarker;
+    let routingControl;
+    let fareEstimateTimeout;
+    
+    // Initialize map
+    function initMap() {
+        map = L.map('map').setView([0, 0], 13);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: ' OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Create custom markers for pickup and dropoff
+        const pickupIcon = L.divIcon({
+            html: '<i class="fas fa-map-marker-alt pickup-marker"></i>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 24],
+            className: 'custom-div-icon'
+        });
+
+        const dropoffIcon = L.divIcon({
+            html: '<i class="fas fa-map-marker-alt dropoff-marker"></i>',
+            iconSize: [24, 24],
+            iconAnchor: [12, 24],
+            className: 'custom-div-icon'
+        });
+
+        pickupMarker = L.marker([0, 0], { icon: pickupIcon, draggable: true }).addTo(map);
+        dropoffMarker = L.marker([0, 0], { icon: dropoffIcon, draggable: true }).addTo(map);
+
+        // Add click event to map for setting locations
+        map.on('click', function(e) {
+            if (!pickupMarker.getLatLng().lat || !pickupMarker.getLatLng().lng) {
+                updatePickupLocation(e.latlng.lat, e.latlng.lng);
+            } else {
+                updateDropoffLocation(e.latlng.lat, e.latlng.lng);
+            }
+        });
+
+        // Add drag end events
+        pickupMarker.on('dragend', function(e) {
+            const latlng = e.target.getLatLng();
+            updatePickupLocation(latlng.lat, latlng.lng);
+        });
+
+        dropoffMarker.on('dragend', function(e) {
+            const latlng = e.target.getLatLng();
+            updateDropoffLocation(latlng.lat, latlng.lng);
+        });
+
+        // Get user's current location
+        if (navigator.geolocation) {
+            $('#locationSpinner').show();
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    map.setView([lat, lng], 15);
+                    updatePickupLocation(lat, lng);
+                    $('#locationSpinner').hide();
+                },
+                function(error) {
+                    console.error('Error getting location:', error);
+                    $('#locationError').show().delay(3000).fadeOut();
+                    $('#locationSpinner').hide();
+                }
+            );
+        }
+
+        // Set up location search
+        setupLocationSearch();
+    }
+
+    // Setup location search functionality
+    function setupLocationSearch() {
+        const pickupInput = document.getElementById('pickup_location');
+        const dropoffInput = document.getElementById('dropoff_location');
+
+        // Function to handle location search
+        async function searchLocation(query, isPickup) {
+            try {
+                const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                
+                if (data.length > 0) {
+                    const location = data[0];
+                    if (isPickup) {
+                        updatePickupLocation(location.lat, location.lon);
+                    } else {
+                        updateDropoffLocation(location.lat, location.lon);
+                    }
+                }
+            } catch (error) {
+                console.error('Error searching location:', error);
+            }
+        }
+
+        // Add event listeners for location inputs
+        pickupInput.addEventListener('change', () => {
+            if (pickupInput.value.trim()) {
+                searchLocation(pickupInput.value, true);
+            }
+        });
+
+        dropoffInput.addEventListener('change', () => {
+            if (dropoffInput.value.trim()) {
+                searchLocation(dropoffInput.value, false);
+            }
+        });
+    }
+    
+    // Update pickup location
+    function updatePickupLocation(lat, lng) {
+        $('#pickupSpinner').show();
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+            .then(response => response.json())
+            .then(data => {
+                const address = data.display_name;
+                $('#pickup_location').val(address);
+                $('#pickup_latitude').val(lat);
+                $('#pickup_longitude').val(lng);
+                pickupMarker.setLatLng([lat, lng]);
+                map.setView([lat, lng], 15);
+                updateRoute();
+                updateNearbyDrivers(lat, lng);
+                $('#pickupSpinner').hide();
+                // Recalculate fare after location update
+                updateFareEstimate();
+            })
+            .catch(error => {
+                console.error('Error getting address:', error);
+                $('#pickupError').show().delay(3000).fadeOut();
+                $('#pickupSpinner').hide();
+            });
+    }
+    
+    // Update dropoff location
+    function updateDropoffLocation(lat, lng) {
+        $('#dropoffSpinner').show();
+        fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`)
+            .then(response => response.json())
+            .then(data => {
+                const address = data.display_name;
+                $('#dropoff_location').val(address);
+                $('#dropoff_latitude').val(lat);
+                $('#dropoff_longitude').val(lng);
+                dropoffMarker.setLatLng([lat, lng]);
+                map.setView([lat, lng], 15);
+                updateRoute();
+                $('#dropoffSpinner').hide();
+                // Recalculate fare after location update
+                updateFareEstimate();
+            })
+            .catch(error => {
+                console.error('Error getting address:', error);
+                $('#dropoffError').show().delay(3000).fadeOut();
+                $('#dropoffSpinner').hide();
+            });
+    }
+    
+    // Update route
+    function updateRoute() {
+        const pickup = pickupMarker.getLatLng();
+        const dropoff = dropoffMarker.getLatLng();
+
+        // Only update route if both pickup and dropoff locations are valid
+        if (pickup && dropoff && pickup.lat && pickup.lng && dropoff.lat && dropoff.lng) {
+            if (routingControl) {
+                map.removeControl(routingControl);
+            }
+
+            // Use GraphHopper as an alternative to OSRM demo server
+            const routingUrl = 'https://graphhopper.com/api/1/route';
+            const apiKey = '{{ graphhopper_api_key }}'; // Add this to your Django settings
+
+            // If no GraphHopper API key is configured, fall back to OSRM with warning
+            if (!apiKey) {
+                console.warn('No routing API key configured. Using OSRM demo server which is not suitable for production.');
+                routingControl = L.Routing.control({
+                    waypoints: [
+                        L.latLng(pickup.lat, pickup.lng),
+                        L.latLng(dropoff.lat, dropoff.lng)
+                    ],
+                    router: L.Routing.osrmv1({
+                        serviceUrl: 'https://router.project-osrm.org/route/v1',
+                        profile: 'driving',
+                        timeout: 30000,
+                        geometryOnly: false
+                    }),
+                    lineOptions: {
+                        styles: [
+                            {color: '#007bff', opacity: 0.8, weight: 6},
+                            {color: '#ffffff', opacity: 0.3, weight: 4}
+                        ]
+                    },
+                    createMarker: function() { return null; },
+                    showAlternatives: false,
+                    fitSelectedRoutes: true,
+                    useZoomParameter: true
+                }).addTo(map);
+            } else {
+                // Use GraphHopper if API key is available
+                fetch(`${routingUrl}?point=${pickup.lat},${pickup.lng}&point=${dropoff.lat},${dropoff.lng}&vehicle=car&key=${apiKey}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.paths && data.paths[0]) {
+                            const route = data.paths[0];
+                            const distance = route.distance / 1000; // Convert to kilometers
+                            const duration = Math.round(route.time / 60000); // Convert to minutes
+
+                            // Draw the route on the map
+                            const coordinates = route.points.coordinates.map(coord => [coord[1], coord[0]]);
+                            if (routeLine) {
+                                map.removeLayer(routeLine);
+                            }
+                            routeLine = L.polyline(coordinates, {
+                                color: '#007bff',
+                                weight: 6,
+                                opacity: 0.8
+                            }).addTo(map);
+
+                            // Calculate and display fare
+                            const baseFare = 50;
+                            const perKmRate = 15;
+                            const perMinRate = 2;
+                            const estimatedFare = baseFare + (distance * perKmRate) + (duration * perMinRate);
+
+                            $('#fareEstimate').html(`
+                                <div class="fare-breakdown">
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Base Fare:</span>
+                                        <span>₹${baseFare.toFixed(2)}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-2">
+                                        <span>Distance (${distance.toFixed(1)} km):</span>
+                                        <span>₹${(distance * perKmRate).toFixed(2)}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between mb-3">
+                                        <span>Time (${duration} mins):</span>
+                                        <span>₹${(duration * perMinRate).toFixed(2)}</span>
+                                    </div>
+                                    <div class="d-flex justify-content-between fw-bold">
+                                        <span>Total Fare:</span>
+                                        <span>₹${estimatedFare.toFixed(2)}</span>
+                                    </div>
+                                </div>
+                            `);
+
+                            // Update hidden form fields
+                            $('#pickup_latitude').val(pickup.lat);
+                            $('#pickup_longitude').val(pickup.lng);
+                            $('#dropoff_latitude').val(dropoff.lat);
+                            $('#dropoff_longitude').val(dropoff.lng);
+                            $('#fare').val(Math.ceil(estimatedFare));
+                            
+                            // Enable the book button
+                            $('#bookButton').disabled = false;
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Routing error:', error);
+                        $('#fareEstimate').html(`
+                            <div class="alert alert-danger">
+                                <i class="fas fa-exclamation-circle"></i>
+                                Unable to calculate route. Please try different locations.
+                            </div>
+                        `);
+                        $('#bookButton').disabled = true;
+                    });
+            }
+
+            routingControl.on('routingerror', function(e) {
+                console.error('Routing error:', e);
+                $('#fareEstimate').html(`
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle"></i>
+                        Unable to calculate route. Please try different locations.
+                    </div>
+                `);
+                $('#bookButton').disabled = true;
+            });
+
+            routingControl.on('routesfound', function(e) {
+                if (e.routes && e.routes[0]) {
+                    const route = e.routes[0];
+                    const distance = route.summary.totalDistance / 1000;
+                    const duration = Math.round(route.summary.totalTime / 60);
+                    
+                    // Calculate fare
+                    const baseFare = 50;
+                    const perKmRate = 15;
+                    const perMinRate = 2;
+                    const estimatedFare = baseFare + (distance * perKmRate) + (duration * perMinRate);
+                    
+                    // Update fare breakdown
+                    $('#fareEstimate').html(`
+                        <div class="fare-breakdown">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Base Fare:</span>
+                                <span>₹${baseFare.toFixed(2)}</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span>Distance (${distance.toFixed(1)} km):</span>
+                                <span>₹${(distance * perKmRate).toFixed(2)}</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-3">
+                                <span>Time (${duration} mins):</span>
+                                <span>₹${(duration * perMinRate).toFixed(2)}</span>
+                            </div>
+                            <div class="d-flex justify-content-between fw-bold">
+                                <span>Total Fare:</span>
+                                <span>₹${estimatedFare.toFixed(2)}</span>
+                            </div>
+                        </div>
+                    `);
+
+                    // Update hidden form fields
+                    $('#pickup_latitude').val(pickup.lat);
+                    $('#pickup_longitude').val(pickup.lng);
+                    $('#dropoff_latitude').val(dropoff.lat);
+                    $('#dropoff_longitude').val(dropoff.lng);
+                    $('#fare').val(Math.ceil(estimatedFare));
+                    
+                    // Enable the book button
+                    $('#bookButton').disabled = false;
+                }
+            });
+        } else {
+            // Clear fare estimate if locations are not set
+            $('#fareEstimate').html(`
+                <div class="text-center py-4">
+                    <p class="text-muted mb-0">Select pickup and dropoff locations to see fare estimate</p>
+                </div>
+            `);
+            $('#bookButton').disabled = true;
+        }
+    }
+    
+    // Use current location
+    window.useCurrentLocation = function() {
+        if (navigator.geolocation) {
+            const locationBtn = document.querySelector('[onclick="useCurrentLocation()"]');
+            const originalContent = locationBtn.innerHTML;
+            locationBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            locationBtn.disabled = true;
+
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    updatePickupLocation(position.coords.latitude, position.coords.longitude);
+                    locationBtn.innerHTML = originalContent;
+                    locationBtn.disabled = false;
+                },
+                function(error) {
+                    console.error('Error getting location:', error);
+                    $('#locationError').show().delay(3000).fadeOut();
+                    locationBtn.innerHTML = originalContent;
+                    locationBtn.disabled = false;
+                }
+            );
+        }
+    };
+    
+    // Use saved address
+    window.useAddress = function(type) {
+        const address = type === 'home' ? '{{ user.rider_profile.home_address }}' : '{{ user.rider_profile.work_address }}';
+        document.getElementById('pickup_location').value = address;
+        // Trigger change event to update map
+        document.getElementById('pickup_location').dispatchEvent(new Event('change'));
+    };
+    
+    // Handle form submission
+    document.getElementById('bookingForm').addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        // Debug: log form data before sending
+        const formDataDebug = new FormData(this);
+        for (const [key, value] of formDataDebug.entries()) {
+            console.log('FormData entry:', key, value);
+        }
+        
+        // Show loading state
+        const submitBtn = document.querySelector('#bookButton');
+        const originalBtnText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Booking...';
+        submitBtn.disabled = true;
+        
+        fetch(this.action, {
+            method: 'POST',
+            body: new FormData(this),
+            headers: {
+                'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const modal = new bootstrap.Modal(document.getElementById('bookingModal'));
+                modal.show();
+                setTimeout(() => {
+                    window.location.href = data.redirect_url;
+                }, 2000);
+            } else {
+                // Show error message
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'alert alert-danger alert-dismissible fade show mt-3';
+                errorDiv.innerHTML = `
+                    <strong>Error:</strong> ${data.error}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                `;
+                document.querySelector('.card-body').insertBefore(errorDiv, document.querySelector('form'));
+                
+                // Reset button state
+                submitBtn.innerHTML = originalBtnText;
+                submitBtn.disabled = false;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            // Show error message
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'alert alert-danger alert-dismissible fade show mt-3';
+            errorDiv.innerHTML = `
+                <strong>Error:</strong> Unable to book ride. Please try again.
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            document.querySelector('.card-body').insertBefore(errorDiv, document.querySelector('form'));
+            
+            // Reset button state
+            submitBtn.innerHTML = originalBtnText;
+            submitBtn.disabled = false;
+        });
+    });
+    
+    // Update nearby drivers
+    function updateNearbyDrivers(lat, lng) {
+        const nearbyDriversContainer = document.getElementById('nearbyDrivers');
+        
+        fetch(`/rides/nearby-drivers/?lat=${lat}&lng=${lng}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (!data.drivers || data.drivers.length === 0) {
+                    nearbyDriversContainer.innerHTML = `
+                        <div class="text-center py-4">
+                            <i class="fas fa-car-side text-muted mb-3" style="font-size: 2rem;"></i>
+                            <p class="text-muted mb-0">No drivers nearby</p>
+                        </div>
+                    `;
+                    return;
+                }
+
+                nearbyDriversContainer.innerHTML = data.drivers.map(driver => `
+                    <div class="list-group-item">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-0">${driver.name}</h6>
+                                <div class="text-muted small">
+                                    <i class="fas fa-map-marker-alt me-1"></i>${driver.distance}km away
+                                </div>
+                            </div>
+                            <div class="text-end">
+                                <span class="badge bg-success">Available</span>
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            })
+            .catch(error => {
+                console.error('Error fetching nearby drivers:', error);
+                nearbyDriversContainer.innerHTML = `
+                    <div class="text-center py-4">
+                        <i class="fas fa-exclamation-circle text-danger mb-3" style="font-size: 2rem;"></i>
+                        <p class="text-muted mb-0">Error loading drivers. Please try again.</p>
+                    </div>
+                `;
+            });
+    }
+    
+    // Update fare estimate
+    function updateFareEstimate() {
+        const pickupLat = document.getElementById('pickup_latitude').value;
+        const pickupLng = document.getElementById('pickup_longitude').value;
+        const dropoffLat = document.getElementById('dropoff_latitude').value;
+        const dropoffLng = document.getElementById('dropoff_longitude').value;
+        const vehicleType = document.getElementById('vehicle_type').value;
+        
+        if (pickupLat && pickupLng && dropoffLat && dropoffLng) {
+            const fareEstimateContainer = document.getElementById('fareEstimate');
+            fareEstimateContainer.innerHTML = `
+                <div class="text-center py-4">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Calculating fare...</span>
+                    </div>
+                    <p class="text-muted mt-2">Calculating fare estimate...</p>
+                </div>
+            `;
+            
+            // Calculate distance using OSRM
+            fetch(`https://router.project-osrm.org/route/v1/driving/${pickupLng},${pickupLat};${dropoffLng},${dropoffLat}?overview=false`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.routes && data.routes[0]) {
+                        const distance = data.routes[0].distance / 1000; // Convert to kilometers
+                        const duration = Math.ceil(data.routes[0].duration / 60); // Convert to minutes
+                        
+                        // Calculate fare based on distance and vehicle type
+                        let baseFare = 50; // Base fare in rupees
+                        let perKmRate = vehicleType === 'SEDAN' ? 15 : 
+                                      vehicleType === 'SUV' ? 20 : 25; // Rate per km in rupees
+                        let waitingRate = 5; // Rate per minute of estimated duration in rupees
+                        
+                        const distanceFare = distance * perKmRate;
+                        const waitingFare = duration * waitingRate;
+                        const estimatedFare = baseFare + distanceFare + waitingFare;
+                        
+                        fareEstimateContainer.innerHTML = `
+                            <div class="text-center">
+                                <h3 class="text-primary mb-3">₹${Math.ceil(estimatedFare)}</h3>
+                                <div class="text-muted small">
+                                    <div class="mb-2">
+                                        <i class="fas fa-road me-1"></i>${distance.toFixed(1)} km
+                                        <span class="mx-1">•</span>
+                                        <i class="fas fa-clock me-1"></i>${duration} mins
+                                    </div>
+                                    <div class="fare-breakdown">
+                                        <div>Base fare: ₹${baseFare.toFixed(2)}</div>
+                                        <div>Distance (₹${perKmRate}/km): ₹${distanceFare.toFixed(2)}</div>
+                                        <div>Time (₹${waitingRate}/min): ₹${waitingFare.toFixed(2)}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+
+                        // Set hidden fare value and enable book button
+                        document.getElementById('fare').value = Math.ceil(estimatedFare);
+                        document.getElementById('bookButton').disabled = false;
+                    } else {
+                        throw new Error('Could not calculate route');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error calculating fare:', error);
+                    fareEstimateContainer.innerHTML = `
+                        <div class="text-center py-4">
+                            <i class="fas fa-exclamation-circle text-danger mb-3" style="font-size: 2rem;"></i>
+                            <p class="text-muted mb-0">Could not calculate fare. Please try again.</p>
+                        </div>
+                    `;
+                    // Disable book button on error
+                    document.getElementById('bookButton').disabled = true;
+                });
+        } else {
+            const fareEstimateContainer = document.getElementById('fareEstimate');
+            fareEstimateContainer.innerHTML = `
+                <div class="text-center py-4">
+                    <p class="text-muted mb-0">Select pickup and dropoff locations to see fare estimate</p>
+                </div>
+            `;
+            // Disable book button until fare is available
+            document.getElementById('bookButton').disabled = true;
+        }
+    }
+    
+    // Add event listener for vehicle type changes
+    document.getElementById('vehicle_type').addEventListener('change', updateFareEstimate);
+    
+    // Initialize map
+    initMap();
+});
+</script>
+{% endblock %} 

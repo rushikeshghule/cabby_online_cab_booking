@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# Django
+*.log
+*.pot
+*.pyc
+local_settings.py
+settings_local.py
+
+# Environment
+.env
+venv/
+ENV/
+.env.*
+
+# Database
+*.sqlite3
+*.db
+
+# Media/static
+# /media
+# /staticfiles
+# /static/
+
+# VSCode
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Migrations (optional, keep if you want to reset frequently)
+*/migrations/__pycache__/
+*/migrations/*.pyc
+
+# Coverage/test
+htmlcov/
+.coverage
+.tox/
+.nox/
+.coverage.*
+.cache
+
+# Other
+*.bak
+.idea/
+*.swp
+*.swo
+
+# Node/npm (if any frontend assets)
+node_modules/
+
+# PDF/Resume Builder (if used)
+*.pdf

@@ -1,0 +1,48 @@
+{% extends 'base.html' %}
+
+{% block title %}Notifications - Cabby{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="row">
+        <div class="col-md-8 mx-auto">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2 class="mb-0">Notifications</h2>
+                {% if unread_count %}
+                    <form method="post" class="d-inline">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-outline-primary">
+                            <i class="fas fa-check-double me-2"></i>Mark All as Read
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+
+            {% if notifications %}
+                <div class="list-group">
+                    {% for notification in notifications %}
+                        <div class="list-group-item list-group-item-action {% if not notification.is_read %}active{% endif %}">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h5 class="mb-1">{{ notification.title }}</h5>
+                                <small>{{ notification.created_at|timesince }} ago</small>
+                            </div>
+                            <p class="mb-1">{{ notification.message }}</p>
+                            {% if notification.type == 'RIDE_REQUEST' %}
+                                <a href="{% url 'ride_detail' notification.ride.id %}" class="btn btn-sm {% if notification.is_read %}btn-primary{% else %}btn-light{% endif %}">
+                                    <i class="fas fa-taxi me-1"></i>View Ride
+                                </a>
+                            {% endif %}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% else %}
+                <div class="text-center py-5">
+                    <i class="fas fa-bell fa-3x text-muted mb-3"></i>
+                    <h4>No Notifications</h4>
+                    <p class="text-muted">You don't have any notifications yet.</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

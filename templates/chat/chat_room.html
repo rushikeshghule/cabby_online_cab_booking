@@ -1,0 +1,351 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Chat - Cabby{% endblock %}
+
+{% block extra_css %}
+<style>
+.chat-container {
+    height: calc(100vh - 200px);
+    min-height: 500px;
+}
+
+.messages-container {
+    height: calc(100% - 60px);
+    overflow-y: auto;
+}
+
+.message {
+    max-width: 75%;
+    margin-bottom: 1rem;
+}
+
+.message-content {
+    padding: 0.75rem 1rem;
+    border-radius: 1rem;
+}
+
+.message.sent {
+    margin-left: auto;
+}
+
+.message.sent .message-content {
+    background-color: #007bff;
+    color: white;
+    border-top-right-radius: 0.25rem;
+}
+
+.message.received {
+    margin-right: auto;
+}
+
+.message.received .message-content {
+    background-color: #f8f9fa;
+    border-top-left-radius: 0.25rem;
+}
+
+.message-time {
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+.message.sent .message-time {
+    text-align: right;
+}
+
+.chat-input {
+    border-top: 1px solid #dee2e6;
+    padding: 1rem;
+    background-color: white;
+}
+
+.chat-header {
+    border-bottom: 1px solid #dee2e6;
+    padding: 1rem;
+    background-color: white;
+}
+
+.user-status {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 0.5rem;
+}
+
+.user-status.online {
+    background-color: #28a745;
+}
+
+.user-status.offline {
+    background-color: #dc3545;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <!-- Hidden div to store data for JavaScript -->
+    <div id="chat-data" 
+        data-ride-id="{{ ride.id }}" 
+        data-user-id="{{ request.user.id }}" 
+        data-other-user-id="{{ other_user.id }}" 
+        data-last-message-id="{{ messages.last.id|default:0 }}"
+        style="display:none;">
+    </div>
+    
+    <div class="card chat-container">
+        <!-- Chat Header -->
+        <div class="chat-header">
+            <div class="d-flex align-items-center">
+                <div class="flex-shrink-0">
+                    {% if other_user.profile_picture %}
+                        <img src="{{ other_user.profile_picture.url }}" alt="{{ other_user.get_full_name }}" class="rounded-circle" style="width: 40px; height: 40px; object-fit: cover;">
+                    {% else %}
+                        <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                            {{ other_user.get_initials }}
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="flex-grow-1 ms-3">
+                    <h5 class="mb-0">{{ other_user.get_full_name }}</h5>
+                    <small class="text-muted">
+                        <span class="user-status {% if other_user.is_online %}online{% else %}offline{% endif %}"></span>
+                        {{ other_user.role|title }}
+                    </small>
+                </div>
+                <div>
+                    <a href="{% url 'ride_detail' ride.id %}" class="btn btn-outline-primary btn-sm">
+                        <i class="fas fa-info-circle me-1"></i>Ride Details
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Messages Container -->
+        <div class="messages-container p-3" id="messages">
+            {% for message in messages %}
+                <div class="message {% if message.sender == request.user %}sent{% else %}received{% endif %}">
+                    <div class="message-content">
+                        {{ message.content }}
+                    </div>
+                    <div class="message-time">
+                        {{ message.created_at|time:"H:i" }}
+                        {% if message.is_read and message.sender == request.user %}
+                            <i class="fas fa-check-double text-primary ms-1"></i>
+                        {% endif %}
+                    </div>
+                </div>
+            {% empty %}
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-comments mb-2" style="font-size: 2rem;"></i>
+                    <p class="mb-0">No messages yet</p>
+                </div>
+            {% endfor %}
+        </div>
+        
+        <!-- Chat Input -->
+        <div class="chat-input">
+            <form id="messageForm" class="d-flex gap-2">
+                {% csrf_token %}
+                <input type="text" id="messageInput" class="form-control" placeholder="Type a message..." required>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Get DOM elements
+    const messagesContainer = document.getElementById('messages');
+    const messageForm = document.getElementById('messageForm');
+    const messageInput = document.getElementById('messageInput');
+    
+    // Get data from hidden div instead of Django template variables
+    const dataElement = document.getElementById('chat-data');
+    const rideId = dataElement.dataset.rideId;
+    const userId = parseInt(dataElement.dataset.userId);
+    const otherUserId = parseInt(dataElement.dataset.otherUserId);
+    const lastMessageId = dataElement.dataset.lastMessageId;
+    
+    let chatSocket = null;
+    
+    // Scroll to bottom of messages
+    function scrollToBottom() {
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
+    
+    // Format time
+    function formatTime(date) {
+        return new Date(date).toLocaleTimeString('en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+            hour12: false
+        });
+    }
+    
+    // Add new message to container
+    function addMessage(message, isSent) {
+        const messageHtml = `
+            <div class="message ${isSent ? 'sent' : 'received'}">
+                <div class="message-content">
+                    ${message.content}
+                </div>
+                <div class="message-time">
+                    ${formatTime(message.created_at || new Date())}
+                    ${isSent ? '<i class="fas fa-check text-primary ms-1"></i>' : ''}
+                </div>
+            </div>
+        `;
+        messagesContainer.insertAdjacentHTML('beforeend', messageHtml);
+        scrollToBottom();
+    }
+    
+    // Connect to WebSocket
+    function connectWebSocket() {
+        // Close any existing connection
+        if (chatSocket) {
+            chatSocket.close();
+        }
+        
+        // Create new WebSocket connection - with fallback for errors
+        try {
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsHost = window.location.hostname;
+            const wsPort = 8001; // Dedicated WebSocket port where Daphne runs
+            const wsURL = `${wsProtocol}//${wsHost}:${wsPort}/chat/${rideId}/`;
+            
+            console.log('Connecting to chat WebSocket at:', wsURL);
+            
+            chatSocket = new WebSocket(wsURL);
+            
+            // WebSocket event handlers
+            chatSocket.onopen = function(e) {
+                console.log('WebSocket connection established');
+                // Show notification that user is connected
+                const statusDiv = document.createElement('div');
+                statusDiv.className = 'text-center my-3';
+                statusDiv.innerHTML = '<span class="badge bg-success">Connected to chat</span>';
+                messagesContainer.appendChild(statusDiv);
+            };
+            
+            chatSocket.onmessage = function(e) {
+                const data = JSON.parse(e.data);
+                
+                if (data.message) {
+                    // Add message to container
+                    addMessage({
+                        content: data.message,
+                        created_at: new Date(),
+                        sender_id: data.sender_id
+                    }, data.sender_id === userId);
+                } else if (data.status) {
+                    // Show user status updates
+                    const statusDiv = document.createElement('div');
+                    statusDiv.className = 'text-center my-2';
+                    statusDiv.innerHTML = `<span class="badge bg-light text-dark">${data.status}</span>`;
+                    messagesContainer.appendChild(statusDiv);
+                }
+            };
+            
+            chatSocket.onclose = function(e) {
+                console.log('WebSocket connection closed');
+                // Try to reconnect
+                setTimeout(function() {
+                    connectWebSocket();
+                }, 3000);
+            };
+            
+            chatSocket.onerror = function(err) {
+                console.error('WebSocket error:', err);
+                // Show error message
+                const errorDiv = document.createElement('div');
+                errorDiv.className = 'text-center my-3';
+                errorDiv.innerHTML = '<span class="badge bg-danger">Connection error. Trying to reconnect...</span>';
+                messagesContainer.appendChild(errorDiv);
+            };
+        } catch (error) {
+            console.error('Error initializing WebSocket:', error);
+            
+            // Show fallback message and use AJAX for messages
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'text-center my-3';
+            errorDiv.innerHTML = '<span class="badge bg-warning">Using fallback chat mode</span>';
+            messagesContainer.appendChild(errorDiv);
+        }
+    }
+    
+    // Send message via WebSocket
+    messageForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const content = messageInput.value.trim();
+        if (!content) return;
+        
+        // Only send if WebSocket is connected
+        if (chatSocket && chatSocket.readyState === WebSocket.OPEN) {
+            chatSocket.send(JSON.stringify({
+                'message': content,
+                'ride_id': rideId,
+                'receiver_id': otherUserId
+            }));
+            
+            // Clear input
+            messageInput.value = '';
+        } else {
+            // Fallback to AJAX if WebSocket is not available
+            const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+            
+            fetch(`{% url 'chat:send_message' ride.id %}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
+                },
+                body: JSON.stringify({ 
+                    content: content,
+                    receiver_id: otherUserId
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    addMessage({
+                        content: content,
+                        created_at: new Date()
+                    }, true);
+                    messageInput.value = '';
+                }
+            })
+            .catch(error => {
+                console.error('Error sending message:', error);
+                alert('Failed to send message. Please try again later.');
+            });
+        }
+    });
+    
+    // Initial scroll to bottom
+    scrollToBottom();
+    
+    // Connect to WebSocket
+    connectWebSocket();
+    
+    // Mark messages as read when user opens the page
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    
+    fetch(`{% url 'chat:mark_messages_read' ride.id %}`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrfToken
+        }
+    });
+    
+    // Focus input
+    messageInput.focus();
+});
+</script>
+{% endblock %}

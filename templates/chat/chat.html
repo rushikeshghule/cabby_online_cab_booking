@@ -1,0 +1,186 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Chat - Cabby{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+    <div class="col-md-12">
+        <!-- Chat Window -->
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex align-items-center">
+                    {% if other_user.profile_picture %}
+                        <img src="{{ other_user.profile_picture.url }}" alt="Profile" class="rounded-circle me-2" style="width: 40px; height: 40px; object-fit: cover;">
+                    {% else %}
+                        <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2" style="width: 40px; height: 40px;">
+                            {{ other_user.get_initials }}
+                        </div>
+                    {% endif %}
+                    <div>
+                        <h5 class="mb-0">{{ other_user.get_full_name }}</h5>
+                        <small class="text-muted">
+                            {% if other_user.is_online %}
+                                <span class="status-indicator status-online"></span>Online
+                            {% else %}
+                                Last seen {{ other_user.last_seen|timesince }} ago
+                            {% endif %}
+                        </small>
+                    </div>
+                    <a href="{% url 'ride_detail' ride.id %}" class="btn btn-outline-primary btn-sm ms-auto">
+                        <i class="fas fa-taxi me-1"></i>View Ride
+                    </a>
+                </div>
+            </div>
+            
+            <div class="card-body chat-container" id="chatMessages">
+                {% for message in messages %}
+                    <div class="chat-message {% if message.sender == request.user %}sent{% else %}received{% endif %}" data-message-id="{{ message.id }}">
+                        <div class="message-content">{{ message.content }}</div>
+                        <small class="text-muted d-block mt-1">{{ message.created_at|time:"H:i" }}</small>
+                    </div>
+                {% empty %}
+                    <div class="text-center py-4">
+                        <i class="fas fa-comments fa-2x text-muted mb-2"></i>
+                        <p class="mb-0">Start the conversation</p>
+                    </div>
+                {% endfor %}
+            </div>
+            
+            <div class="card-footer">
+                <form id="messageForm" method="post" class="d-flex gap-2">
+                    {% csrf_token %}
+                    <input type="text" name="message" class="form-control" placeholder="Type a message..." required>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-paper-plane"></i>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const chatContainer = document.getElementById('chatMessages');
+        const messageForm = document.getElementById('messageForm');
+        let lastMessageId = null;
+        let pollingInterval = null;
+        
+        // Get the last message ID
+        const messages = document.querySelectorAll('.chat-message');
+        if (messages.length > 0) {
+            lastMessageId = messages[messages.length - 1].dataset.messageId;
+        }
+        
+        // Scroll to bottom of chat
+        function scrollToBottom() {
+            if (chatContainer) {
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+            }
+        }
+        
+        // Initial scroll
+        scrollToBottom();
+        
+        // Try WebSocket first
+        let wsConnected = false;
+        const chatSocket = new WebSocket(
+            'ws://' + window.location.host +
+            '/ws/chat/{{ ride.id }}/'
+        );
+        
+        chatSocket.onopen = function() {
+            wsConnected = true;
+            console.log('WebSocket connected');
+            // Stop polling if it was active
+            if (pollingInterval) {
+                clearInterval(pollingInterval);
+            }
+        };
+        
+        chatSocket.onmessage = function(e) {
+            const data = JSON.parse(e.data);
+            appendMessage(data);
+        };
+        
+        chatSocket.onclose = function(e) {
+            console.log('WebSocket closed, falling back to polling');
+            wsConnected = false;
+            startPolling();
+        };
+        
+        // Polling fallback
+        function startPolling() {
+            if (!pollingInterval) {
+                pollingInterval = setInterval(pollMessages, 3000);
+            }
+        }
+        
+        function pollMessages() {
+            fetch(`/chat/{{ ride.id }}/messages/?after=${lastMessageId}`)
+                .then(response => response.json())
+                .then(data => {
+                    data.messages.forEach(message => {
+                        appendMessage(message);
+                    });
+                })
+                .catch(error => console.error('Error polling messages:', error));
+        }
+        
+        function appendMessage(data) {
+            const messageHtml = `
+                <div class="chat-message ${data.sender_id === {{ request.user.id }} ? 'sent' : 'received'}" data-message-id="${data.id}">
+                    <div class="message-content">${data.message}</div>
+                    <small class="text-muted d-block mt-1">${data.timestamp}</small>
+                </div>
+            `;
+            chatContainer.insertAdjacentHTML('beforeend', messageHtml);
+            lastMessageId = data.id;
+            scrollToBottom();
+        }
+        
+        // Handle message submission
+        messageForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            const messageInput = this.querySelector('input[name="message"]');
+            const message = messageInput.value.trim();
+            
+            if (message) {
+                if (wsConnected) {
+                    chatSocket.send(JSON.stringify({
+                        'message': message
+                    }));
+                } else {
+                    // Fallback to HTTP POST
+                    fetch(`/chat/{{ ride.id }}/`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                        },
+                        body: JSON.stringify({
+                            'message': message
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        appendMessage(data);
+                    })
+                    .catch(error => console.error('Error sending message:', error));
+                }
+                messageInput.value = '';
+            }
+        });
+        
+        // Start polling if WebSocket fails to connect
+        setTimeout(() => {
+            if (!wsConnected) {
+                startPolling();
+            }
+        }, 3000);
+    });
+</script>
+{% endblock %} 

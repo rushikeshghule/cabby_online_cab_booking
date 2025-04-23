@@ -1,0 +1,306 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Admin Dashboard - Cabby{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- Welcome Section -->
+    <div class="row mb-4">
+        <div class="col">
+            <h2>Admin Dashboard</h2>
+            <p class="lead">Monitor and manage your cab service</p>
+        </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Total Users</h5>
+                    <p class="display-4">{{ total_users }}</p>
+                    <div class="small text-muted">
+                        {{ rider_count }} Riders<br>
+                        {{ driver_count }} Drivers
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Active Rides</h5>
+                    <p class="display-4">{{ active_rides }}</p>
+                    <div class="small text-muted">
+                        {{ completed_today }} completed today
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Today's Revenue</h5>
+                    <p class="display-4">${{ todays_revenue|default:"0" }}</p>
+                    <div class="small text-muted">
+                        {{ revenue_growth }}% from yesterday
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">Pending Approvals</h5>
+                    <p class="display-4">{{ pending_approvals }}</p>
+                    <a href="#driverApprovals" class="btn btn-outline-primary btn-sm">Review</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Revenue Chart -->
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Revenue Overview</h5>
+            <div class="btn-group">
+                <button type="button" class="btn btn-outline-primary active" data-period="week">Week</button>
+                <button type="button" class="btn btn-outline-primary" data-period="month">Month</button>
+                <button type="button" class="btn btn-outline-primary" data-period="year">Year</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <canvas id="revenueChart"></canvas>
+        </div>
+    </div>
+
+    <!-- Active Rides -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Active Rides</h5>
+        </div>
+        <div class="card-body">
+            {% if active_rides_list %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Ride ID</th>
+                                <th>Rider</th>
+                                <th>Driver</th>
+                                <th>From</th>
+                                <th>To</th>
+                                <th>Status</th>
+                                <th>Started At</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for ride in active_rides_list %}
+                            <tr>
+                                <td>#{{ ride.id }}</td>
+                                <td>{{ ride.rider.get_full_name }}</td>
+                                <td>{{ ride.driver.get_full_name }}</td>
+                                <td>{{ ride.pickup_address|truncatechars:20 }}</td>
+                                <td>{{ ride.dropoff_address|truncatechars:20 }}</td>
+                                <td>
+                                    <span class="badge bg-primary">{{ ride.status }}</span>
+                                </td>
+                                <td>{{ ride.started_at|date:"H:i" }}</td>
+                                <td>
+                                    <a href="{% url 'ride_detail' ride.id %}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="text-center text-muted my-4">No active rides at the moment.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Driver Approvals -->
+    <div class="card mb-4" id="driverApprovals">
+        <div class="card-header">
+            <h5 class="mb-0">Pending Driver Approvals</h5>
+        </div>
+        <div class="card-body">
+            {% if pending_drivers %}
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Driver</th>
+                                <th>Vehicle</th>
+                                <th>License</th>
+                                <th>Documents</th>
+                                <th>Registered</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for driver in pending_drivers %}
+                            <tr>
+                                <td>{{ driver.user.get_full_name }}</td>
+                                <td>
+                                    {{ driver.vehicle_type }}<br>
+                                    <small class="text-muted">{{ driver.vehicle_number }}</small>
+                                </td>
+                                <td>{{ driver.license_number }}</td>
+                                <td>
+                                    <a href="{{ driver.license_document.url }}" class="btn btn-sm btn-outline-secondary" target="_blank">
+                                        <i class="fas fa-id-card"></i> License
+                                    </a>
+                                    <a href="{{ driver.insurance_document.url }}" class="btn btn-sm btn-outline-secondary" target="_blank">
+                                        <i class="fas fa-file-alt"></i> Insurance
+                                    </a>
+                                </td>
+                                <td>{{ driver.user.created_at|date:"M d, Y" }}</td>
+                                <td>
+                                    <form method="post" action="{% url 'approve_driver' driver.user.id %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-success">
+                                            <i class="fas fa-check"></i> Approve
+                                        </button>
+                                    </form>
+                                    <form method="post" action="{% url 'reject_driver' driver.user.id %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-danger">
+                                            <i class="fas fa-times"></i> Reject
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="text-center text-muted my-4">No pending driver approvals.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Map View -->
+    <div class="card">
+        <div class="card-header">
+            <h5 class="mb-0">Live Map View</h5>
+        </div>
+        <div class="card-body p-0">
+            <div id="map" class="map-container"></div>
+        </div>
+    </div>
+</div>
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_api_key }}&libraries=places"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize revenue chart
+    const ctx = document.getElementById('revenueChart').getContext('2d');
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [{
+                label: 'Revenue',
+                data: [],
+                borderColor: '#0d6efd',
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(value) {
+                            return '$' + value;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Load revenue data
+    function loadRevenueData(period) {
+        fetch(`/admin/revenue/?period=${period}`)
+            .then(response => response.json())
+            .then(data => {
+                chart.data.labels = data.labels;
+                chart.data.datasets[0].data = data.revenue;
+                chart.update();
+            });
+    }
+
+    // Period selector buttons
+    document.querySelectorAll('[data-period]').forEach(button => {
+        button.addEventListener('click', function() {
+            document.querySelector('[data-period].active').classList.remove('active');
+            this.classList.add('active');
+            loadRevenueData(this.dataset.period);
+        });
+    });
+
+    // Load initial data
+    loadRevenueData('week');
+
+    // Initialize map
+    const mapContainer = document.getElementById('map');
+    const map = window.cabby.initMap(mapContainer);
+    
+    // Load and display active rides and drivers
+    function updateMap() {
+        fetch('/admin/map-data/')
+            .then(response => response.json())
+            .then(data => {
+                // Clear existing markers
+                map.data.forEach(feature => {
+                    map.data.remove(feature);
+                });
+                
+                // Add drivers
+                data.drivers.forEach(driver => {
+                    new google.maps.Marker({
+                        position: {
+                            lat: parseFloat(driver.latitude),
+                            lng: parseFloat(driver.longitude)
+                        },
+                        map: map,
+                        icon: '/static/img/car-marker.png',
+                        title: `Driver: ${driver.name}`
+                    });
+                });
+                
+                // Add active rides
+                data.rides.forEach(ride => {
+                    // Draw route
+                    new google.maps.Polyline({
+                        path: [
+                            { lat: parseFloat(ride.pickup_lat), lng: parseFloat(ride.pickup_lng) },
+                            { lat: parseFloat(ride.dropoff_lat), lng: parseFloat(ride.dropoff_lng) }
+                        ],
+                        map: map,
+                        strokeColor: '#0d6efd',
+                        strokeWeight: 2
+                    });
+                });
+            });
+    }
+
+    // Update map every 30 seconds
+    updateMap();
+    setInterval(updateMap, 30000);
+});
+</script>
+{% endblock %}
+{% endblock %} 

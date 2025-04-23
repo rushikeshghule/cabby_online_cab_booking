@@ -1,0 +1,459 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Ride History - Cabby{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-lg-12">
+            <div class="card border-0 bg-gradient-primary text-white shadow-lg" style="background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);">
+                <div class="card-body p-4">
+                    <div class="d-flex align-items-center">
+                        <div class="me-4">
+                            <div class="display-5 fw-bold mb-0">
+                                <i class="fas fa-history"></i>
+                            </div>
+                        </div>
+                        <div>
+                            <h1 class="display-6 fw-bold mb-0">Ride History</h1>
+                            <p class="lead opacity-75 mb-0">View and manage your past rides</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <!-- Filters Card -->
+        <div class="col-lg-12">
+            <div class="card border-0 shadow-sm rounded-lg">
+                <div class="card-header bg-white py-3">
+                    <h5 class="mb-0 fw-bold text-primary">
+                        <i class="fas fa-filter me-2"></i>Filters
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <form method="get" class="row g-3">
+                        <div class="col-md-3">
+                            <div class="form-floating">
+                                <select class="form-select" id="status" name="status">
+                                    <option value="">All Statuses</option>
+                                    {% for status in status_choices %}
+                                        <option value="{{ status.0 }}" {% if selected_status == status.0 %}selected{% endif %}>
+                                            {{ status.1 }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                <label for="status">Ride Status</label>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="form-floating">
+                                <select class="form-select" id="date_range" name="date_range">
+                                    <option value="all" {% if date_range == 'all' %}selected{% endif %}>All Time</option>
+                                    <option value="today" {% if date_range == 'today' %}selected{% endif %}>Today</option>
+                                    <option value="week" {% if date_range == 'week' %}selected{% endif %}>This Week</option>
+                                    <option value="month" {% if date_range == 'month' %}selected{% endif %}>This Month</option>
+                                    <option value="custom" {% if date_range == 'custom' %}selected{% endif %}>Custom Range</option>
+                                </select>
+                                <label for="date_range">Date Range</label>
+                            </div>
+                        </div>
+                        <div class="col-md-3 custom-date-range {% if date_range != 'custom' %}d-none{% endif %}">
+                            <div class="form-floating">
+                                <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date|date:'Y-m-d' }}">
+                                <label for="start_date">Start Date</label>
+                            </div>
+                        </div>
+                        <div class="col-md-3 custom-date-range {% if date_range != 'custom' %}d-none{% endif %}">
+                            <div class="form-floating">
+                                <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date|date:'Y-m-d' }}">
+                                <label for="end_date">End Date</label>
+                            </div>
+                        </div>
+                        <div class="col-12 text-end">
+                            <a href="{% url 'ride_history' %}" class="btn btn-outline-secondary">
+                                <i class="fas fa-times me-1"></i>Clear
+                            </a>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fas fa-check me-1"></i>Apply Filters
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rides List -->
+    <div class="row">
+        <div class="col-lg-12">
+            <div class="card border-0 shadow-sm rounded-lg">
+                <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0 fw-bold text-primary">
+                        <i class="fas fa-taxi me-2"></i>Your Rides
+                        <span class="badge bg-primary rounded-pill ms-2">{{ rides.paginator.count }}</span>
+                    </h5>
+                    <div class="dropdown">
+                        <button class="btn btn-outline-primary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-sort me-1"></i>Sort by: {{ sort_by|default:"Date"|title }}
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end shadow">
+                            <li>
+                                <a class="dropdown-item {% if sort_by == 'date' %}active{% endif %}" 
+                                   href="?{{ request.GET.urlencode }}&sort_by=date">
+                                    <i class="fas fa-calendar-alt me-2"></i>Date
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item {% if sort_by == 'fare' %}active{% endif %}" 
+                                   href="?{{ request.GET.urlencode }}&sort_by=fare">
+                                    <i class="fas fa-rupee-sign me-2"></i>Fare
+                                </a>
+                            </li>
+                            <li>
+                                <a class="dropdown-item {% if sort_by == 'distance' %}active{% endif %}" 
+                                   href="?{{ request.GET.urlencode }}&sort_by=distance">
+                                    <i class="fas fa-route me-2"></i>Distance
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="card-body p-0">
+                    {% if rides %}
+                        <div class="table-responsive">
+                            <table class="table table-hover border-top-0 mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Date & Time</th>
+                                        <th>Route</th>
+                                        {% if is_driver %}
+                                            <th>Rider</th>
+                                        {% else %}
+                                            <th>Driver</th>
+                                        {% endif %}
+                                        <th>Status</th>
+                                        <th>Fare</th>
+                                        <th class="text-center">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for ride in rides %}
+                                        <tr>
+                                            <td class="align-middle">
+                                                <div class="d-flex flex-column">
+                                                    <span class="fw-bold">{{ ride.created_at|date:"M d, Y" }}</span>
+                                                    <small class="text-muted">{{ ride.created_at|date:"h:i A" }}</small>
+                                                </div>
+                                            </td>
+                                            <td class="align-middle">
+                                                <div class="route-info d-flex">
+                                                    <div class="route-icon-container me-2">
+                                                        <div class="route-line"></div>
+                                                        <div class="pickup-dot"></div>
+                                                        <div class="dropoff-dot"></div>
+                                                    </div>
+                                                    <div>
+                                                        <div class="mb-1">
+                                                            <span class="text-truncate d-inline-block" style="max-width: 250px;" 
+                                                                data-bs-toggle="tooltip" title="{{ ride.pickup_address }}">
+                                                                {{ ride.pickup_address }}
+                                                            </span>
+                                                        </div>
+                                                        <div>
+                                                            <span class="text-truncate d-inline-block text-muted" style="max-width: 250px;" 
+                                                                data-bs-toggle="tooltip" title="{{ ride.dropoff_address }}">
+                                                                {{ ride.dropoff_address }}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td class="align-middle">
+                                                {% if is_driver %}
+                                                    {% if ride.rider %}
+                                                        <div class="d-flex align-items-center">
+                                                            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2"
+                                                                    style="width: 40px; height: 40px; font-size: 16px;">
+                                                                {{ ride.rider.get_initials }}
+                                                            </div>
+                                                            <div>
+                                                                <div class="fw-bold">{{ ride.rider.get_full_name }}</div>
+                                                                <div class="text-muted small">
+                                                                    <i class="fas fa-star text-warning"></i> 
+                                                                    {{ ride.rider.rider_profile.average_rating|default:"New Rider" }}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    {% else %}
+                                                        <span class="text-muted">Pending</span>
+                                                    {% endif %}
+                                                {% else %}
+                                                    {% if ride.driver %}
+                                                        <div class="d-flex align-items-center">
+                                                            <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center me-2"
+                                                                    style="width: 40px; height: 40px; font-size: 16px;">
+                                                                {{ ride.driver.get_initials }}
+                                                            </div>
+                                                            <div>
+                                                                <div class="fw-bold">{{ ride.driver.get_full_name }}</div>
+                                                                <div class="text-muted small">
+                                                                    <i class="fas fa-star text-warning"></i> 
+                                                                    {{ ride.driver.driver_profile.rating|default:"New Driver" }}
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    {% else %}
+                                                        <span class="text-muted">Not assigned</span>
+                                                    {% endif %}
+                                                {% endif %}
+                                            </td>
+                                            <td class="align-middle">
+                                                <span class="status-badge status-{{ ride.status|lower }}">
+                                                    {{ ride.status }}
+                                                </span>
+                                            </td>
+                                            <td class="align-middle">
+                                                <div class="fw-bold">₹{{ ride.fare|default:"--" }}</div>
+                                                <small class="text-muted">{{ ride.distance|default:"0" }} km</small>
+                                            </td>
+                                            <td class="align-middle text-center">
+                                                <div class="btn-group" role="group">
+                                                    <a href="{% url 'ride_detail' ride.id %}" 
+                                                       class="btn btn-primary btn-sm">
+                                                        <i class="fas fa-eye me-1"></i>Details
+                                                    </a>
+                                                    {% if ride.status == 'COMPLETED' and not is_driver and not ride.rider_rating %}
+                                                        <a href="{% url 'ride_detail' ride.id %}#rating" 
+                                                           class="btn btn-warning btn-sm">
+                                                            <i class="fas fa-star me-1"></i>Rate
+                                                        </a>
+                                                    {% endif %}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        <!-- Pagination -->
+                        {% if rides.has_other_pages %}
+                            <nav class="d-flex justify-content-center p-3">
+                                <ul class="pagination mb-0">
+                                    {% if rides.has_previous %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page={{ rides.previous_page_number }}&{{ request.GET.urlencode }}">
+                                                <i class="fas fa-chevron-left"></i>
+                                            </a>
+                                        </li>
+                                    {% endif %}
+                                    
+                                    {% for num in rides.paginator.page_range %}
+                                        {% if rides.number == num %}
+                                            <li class="page-item active">
+                                                <span class="page-link">{{ num }}</span>
+                                            </li>
+                                        {% elif num > rides.number|add:'-3' and num < rides.number|add:'3' %}
+                                            <li class="page-item">
+                                                <a class="page-link" href="?page={{ num }}&{{ request.GET.urlencode }}">
+                                                    {{ num }}
+                                                </a>
+                                            </li>
+                                        {% endif %}
+                                    {% endfor %}
+                                    
+                                    {% if rides.has_next %}
+                                        <li class="page-item">
+                                            <a class="page-link" href="?page={{ rides.next_page_number }}&{{ request.GET.urlencode }}">
+                                                <i class="fas fa-chevron-right"></i>
+                                            </a>
+                                        </li>
+                                    {% endif %}
+                                </ul>
+                            </nav>
+                        {% endif %}
+                    {% else %}
+                        <div class="text-center py-5">
+                            <img src="https://images.unsplash.com/photo-1585503418537-88331351ad99?ixlib=rb-4.0.3&auto=format&fit=crop&w=300&h=200&q=80" 
+                                alt="No rides" class="img-fluid rounded mb-4" style="max-height: 200px; object-fit: cover;">
+                            <h4 class="text-muted mb-3">No rides found</h4>
+                            <p class="text-muted mb-4">Try adjusting your filters or book a new ride.</p>
+                            <a href="{% url 'book_ride' %}" class="btn btn-primary btn-lg">
+                                <i class="fas fa-taxi me-2"></i>Book a Ride
+                            </a>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Header Styles */
+.display-6 {
+    font-size: 2.5rem;
+}
+
+/* Status Badge Styles */
+.status-badge {
+    display: inline-block;
+    padding: 0.5rem 1rem;
+    border-radius: 50px;
+    font-weight: 600;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-completed {
+    background-color: rgba(40, 167, 69, 0.1);
+    color: #28a745;
+}
+
+.status-requested {
+    background-color: rgba(0, 123, 255, 0.1);
+    color: #007bff;
+}
+
+.status-accepted {
+    background-color: rgba(23, 162, 184, 0.1);
+    color: #17a2b8;
+}
+
+.status-started {
+    background-color: rgba(255, 193, 7, 0.1);
+    color: #ffc107;
+}
+
+.status-cancelled {
+    background-color: rgba(220, 53, 69, 0.1);
+    color: #dc3545;
+}
+
+/* Route Visualization */
+.route-icon-container {
+    position: relative;
+    height: 40px;
+    width: 20px;
+}
+
+.route-line {
+    position: absolute;
+    left: 9px;
+    top: 5px;
+    bottom: 5px;
+    width: 2px;
+    background-color: #2575fc;
+}
+
+.pickup-dot {
+    position: absolute;
+    top: 0;
+    left: 5px;
+    width: 10px;
+    height: 10px;
+    background-color: #2575fc;
+    border-radius: 50%;
+}
+
+.dropoff-dot {
+    position: absolute;
+    bottom: 0;
+    left: 5px;
+    width: 10px;
+    height: 10px;
+    background-color: #6a11cb;
+    border-radius: 50%;
+}
+
+/* Form Styles */
+.form-control:focus,
+.form-select:focus {
+    box-shadow: 0 0 0 0.25rem rgba(106, 17, 203, 0.25);
+    border-color: #2575fc;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+    border: none;
+}
+
+.btn-primary:hover {
+    background: linear-gradient(135deg, #5a0cb6 0%, #1565e6 100%);
+}
+
+/* Table Styles */
+.table {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.table th {
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 0.825rem;
+    letter-spacing: 0.5px;
+    padding: 1rem;
+}
+
+.table td {
+    padding: 1rem;
+    vertical-align: middle;
+}
+
+/* Pagination Styles */
+.page-item.active .page-link {
+    background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+    border-color: #2575fc;
+}
+
+.page-link {
+    color: #6a11cb;
+}
+
+.page-link:hover {
+    color: #5a0cb6;
+}
+
+/* Card Styles */
+.card {
+    overflow: hidden;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.card:hover {
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+}
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize tooltips
+    var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+    
+    // Handle date range selection
+    const dateRangeSelect = document.getElementById('date_range');
+    const customDateRangeFields = document.querySelectorAll('.custom-date-range');
+    
+    dateRangeSelect.addEventListener('change', function() {
+        const showCustomFields = this.value === 'custom';
+        customDateRangeFields.forEach(field => {
+            field.classList.toggle('d-none', !showCustomFields);
+        });
+    });
+});
+</script>
+{% endblock %}
