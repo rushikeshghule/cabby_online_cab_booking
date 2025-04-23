@@ -472,6 +472,20 @@
 
 <!-- Main JavaScript logic -->
 <script>
+// --- Notification Audio Priming ---
+let notificationAudioPrimed = false;
+function primeNotificationAudio() {
+    if (!notificationAudioPrimed) {
+        const audio = new Audio('/static/sounds/mixkit-positive-notification-951.wav');
+        audio.volume = 0; // Silent
+        audio.play().catch(() => {}); // Ignore errors
+        notificationAudioPrimed = true;
+    }
+}
+document.addEventListener('click', primeNotificationAudio, { once: true });
+document.addEventListener('keydown', primeNotificationAudio, { once: true });
+document.addEventListener('touchstart', primeNotificationAudio, { once: true });
+
 // Define global variables
 let map, driverMarker;
 let currentLat = null;
@@ -1567,9 +1581,12 @@ function showNotificationToast(title, message, actionUrl) {
 // Play a notification sound
 function playNotificationSound() {
     try {
+        console.log('Trying to play notification sound...');
         const audio = new Audio('/static/sounds/mixkit-positive-notification-951.wav');
         audio.volume = 0.5;
-        audio.play().catch(e => console.log('Audio play failed:', e));
+        audio.play().then(() => {
+            console.log('Notification sound played successfully.');
+        }).catch(e => console.log('Audio play failed:', e));
     } catch (e) {
         console.log('Audio not supported');
     }

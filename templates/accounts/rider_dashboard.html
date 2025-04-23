@@ -401,9 +401,22 @@
 {% block extra_js %}
 <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 <script>
-// Store Django context in a JSON template to avoid JavaScript linting issues
+// --- Notification Audio Priming ---
+let notificationAudioPrimed = false;
+function primeNotificationAudio() {
+    if (!notificationAudioPrimed) {
+        const audio = new Audio('/static/sounds/mixkit-positive-notification-951.wav');
+        audio.volume = 0; // Silent
+        audio.play().catch(() => {}); // Ignore errors
+        notificationAudioPrimed = true;
+    }
+}
+document.addEventListener('click', primeNotificationAudio, { once: true });
+document.addEventListener('keydown', primeNotificationAudio, { once: true });
+document.addEventListener('touchstart', primeNotificationAudio, { once: true });
 </script>
-<script type="text/template" id="cabby-context">
+
+<script type="application/json" id="cabby-context">
 {
     "user": {
         "id": {{ request.user.id }},
@@ -495,7 +508,7 @@ function setupNotificationSocket() {
             
             // Handle different types of messages
             if (data.type === 'notification') {
-                showNotification(data.message, data.level, data.actions);
+                showNotificationToast(data.level || "Notification", data.message, (data.actions && data.actions[0] && data.actions[0].url) ? data.actions[0].url : null);
             } else if (data.type === 'ride_status_update') {
                 handleRideStatusUpdate(data);
             }
@@ -527,7 +540,7 @@ function fetchNotifications() {
         .then(data => {
             if (data.notifications && data.notifications.length > 0) {
                 data.notifications.forEach(notification => {
-                    showNotification(notification.message, notification.level, notification.actions);
+                    showNotificationToast(notification.level || "Notification", notification.message, (notification.actions && notification.actions[0] && notification.actions[0].url) ? notification.actions[0].url : null);
                 });
             }
         })
@@ -550,6 +563,8 @@ function handleRideStatusUpdate(data) {
 }
 
 function showNotificationToast(title, message, actionUrl) {
+    // Play notification sound (moved here to match driver dashboard)
+    playNotificationSound();
     // Create toast container if it doesn't exist
     let toastContainer = document.querySelector('.toast-container');
     if (!toastContainer) {
@@ -753,5 +768,46 @@ function debounce(func, wait) {
         }, wait);
     };
 }
+function playNotificationSound() {
+    try {
+        // Create audio element with different notification sound
+        const audio = new Audio('/static/sounds/mixkit-positive-notification-951.wav');
+        if (!audio) {
+            console.error("Could not create audio element");
+            return;
+        }
+        
+        // Set volume (0.0 to 1.0)
+        audio.volume = 0.7;
+        
+        // Play the sound
+        audio.play()
+            .then(() => console.log("Notification sound played successfully"))
+            .catch(error => {
+                console.error("Error playing notification sound:", error);
+                // Try alternative approach if the first one fails
+                const alternativeAudio = new Audio('https://cdn.pixabay.com/download/audio/2022/03/15/audio_88d598b0fe.mp3?filename=notification-sound-7062.mp3');
+                alternativeAudio.volume = 0.5;
+                alternativeAudio.play().catch(e => console.log('Alternative audio play failed:', e));
+            });
+    } catch (e) {
+        console.error("Audio playback not supported:", e);
+    }
+}
+// --- Notification Sound Logic ---
+function playNotificationSound() {
+    try {
+        console.log('Trying to play notification sound...');
+        const audio = new Audio('/static/sounds/mixkit-positive-notification-951.wav');
+        audio.volume = 0.5;
+        audio.play().then(() => {
+            console.log('Notification sound played successfully.');
+        }).catch(e => console.log('Audio play failed:', e));
+    } catch (e) {
+        console.log('Audio not supported');
+    }
+}
+
+// Removed monkey-patching. Notification sound now plays directly in showNotificationToast.
 </script>
 {% endblock %}
